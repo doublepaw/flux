@@ -850,3 +850,93 @@ async fn test_concurrent_poll_commit_stress() {
         watermark
     );
 }
+
+/// Regression test: two readers commit adjacent ranges at the same instant.
+///
+/// commit_range recomputes committed_watermark from MIN(start_offset) of the
+/// remaining inflight rows. Under READ COMMITTED, concurrent commits each saw
+/// the other's not-yet-committed DELETE, so the last writer pinned the
+/// watermark below the true committed prefix — permanently, since nothing
+/// recomputes it afterwards.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_concurrent_commits_advance_watermark() {
+    let db = TestDb::new().await;
+    let topic_id = TopicId(db.create_topic("commit-race").await as u32);
+
+    // insert_test_batches creates 10-record batches of 1024 bytes each;
+    // max_bytes = 1024 below makes each poll dispatch exactly one batch.
+    let rounds = 25u64;
+    insert_test_batches(&db.pool, topic_id, (rounds * 2 * 10) as i64).await;
+
+    let config = CoordinatorConfig {
+        lease_duration: Duration::from_secs(45),
+        session_timeout: Duration::from_secs(30),
+        ..Default::default()
+    };
+    let coordinator = Arc::new(Coordinator::new(db.pool.clone(), config));
+    for reader in ["reader-a", "reader-b"] {
+        coordinator
+            .join_group("race-group", topic_id, reader)
+            .await
+            .expect("join");
+    }
+
+    for round in 0..rounds {
+        let poll_a = coordinator
+            .poll("race-group", topic_id, "reader-a", 1024)
+            .await
+            .expect("poll a");
+        let poll_b = coordinator
+            .poll("race-group", topic_id, "reader-b", 1024)
+            .await
+            .expect("poll b");
+        for poll in [&poll_a, &poll_b] {
+            assert_eq!(poll.status, PollStatus::Ok);
+            assert!(
+                poll.start_offset != poll.end_offset,
+                "poll dispatched a range"
+            );
+        }
+        let expected_watermark = poll_a.end_offset.0.max(poll_b.end_offset.0);
+
+        // Commit both ranges at the same instant.
+        let barrier = Arc::new(tokio::sync::Barrier::new(2));
+        let mut handles = vec![];
+        for (reader, poll) in [("reader-a", poll_a), ("reader-b", poll_b)] {
+            let coord = coordinator.clone();
+            let barrier = barrier.clone();
+            handles.push(tokio::spawn(async move {
+                barrier.wait().await;
+                coord
+                    .commit_range(
+                        "race-group",
+                        topic_id,
+                        reader,
+                        poll.start_offset,
+                        poll.end_offset,
+                    )
+                    .await
+            }));
+        }
+        for h in handles {
+            let status = h.await.expect("task").expect("commit");
+            assert_eq!(status, CommitStatus::Ok);
+        }
+
+        let watermark: i64 = sqlx::query_scalar(
+            "SELECT committed_watermark FROM reader_group_state \
+             WHERE group_id = $1 AND topic_id = $2",
+        )
+        .bind("race-group")
+        .bind(topic_id.0 as i32)
+        .fetch_one(&db.pool)
+        .await
+        .expect("query watermark");
+
+        assert_eq!(
+            watermark as u64, expected_watermark,
+            "round {}: both commits acked but watermark lags the committed prefix",
+            round
+        );
+    }
+}

@@ -27,6 +27,34 @@ impl Coordinator {
         }
     }
 
+    /// Lock the group's state row for the rest of the transaction.
+    ///
+    /// Every transaction that deletes inflight rows and recomputes
+    /// committed_watermark from MIN(start_offset) must take this lock first:
+    /// under READ COMMITTED, concurrent recomputes each see the other's
+    /// not-yet-committed DELETE and pin the watermark below the true
+    /// committed prefix. Taking this lock before touching reader_inflight or
+    /// reader_members also keeps lock ordering consistent with poll and
+    /// join_group (group state first), preventing deadlocks.
+    async fn lock_group_state(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        group_id: &str,
+        topic_id: TopicId,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            r#"
+            SELECT 1 FROM reader_group_state
+            WHERE group_id = $1 AND topic_id = $2
+            FOR UPDATE
+            "#,
+        )
+        .bind(group_id)
+        .bind(topic_id.0 as i32)
+        .execute(&mut **tx)
+        .await?;
+        Ok(())
+    }
+
     /// Handle a JoinGroup request.
     #[tracing::instrument(
         level = "debug",
@@ -78,6 +106,7 @@ impl Coordinator {
         reader_id: &str,
     ) -> Result<HeartbeatStatus, sqlx::Error> {
         let mut tx = self.pool.begin().await?;
+        Self::lock_group_state(&mut tx, group_id, topic_id).await?;
 
         // 1. Update member heartbeat
         let updated = sqlx::query(
@@ -204,6 +233,7 @@ impl Coordinator {
         reader_id: &str,
     ) -> Result<(), sqlx::Error> {
         let mut tx = self.pool.begin().await?;
+        Self::lock_group_state(&mut tx, group_id, topic_id).await?;
 
         // 1. Release this reader's inflight ranges and roll back
         //    dispatch_cursor so those ranges get re-dispatched to other readers.
@@ -284,6 +314,7 @@ impl Coordinator {
         end_offset: Offset,
     ) -> Result<CommitStatus, sqlx::Error> {
         let mut tx = self.pool.begin().await?;
+        Self::lock_group_state(&mut tx, group_id, topic_id).await?;
 
         // 1. Delete the inflight range owned by this reader
         let result = sqlx::query(
@@ -646,6 +677,7 @@ impl Coordinator {
         reader_id: &str,
     ) -> Result<(), sqlx::Error> {
         let mut tx = self.pool.begin().await?;
+        Self::lock_group_state(&mut tx, group_id, topic_id).await?;
 
         // Release all inflight ranges owned by this reader
         sqlx::query(
