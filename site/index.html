@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flux — Event streaming, simplified.</title>
+  <meta name="description" content="Replace Kafka + Schema Registry + Iceberg with a single binary. No partitions to tune. No brokers to replicate. Just S3, Postgres, and your code.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ── Nav ── -->
+<nav>
+  <div class="nav-inner">
+    <a href="/" class="wordmark">flux</a>
+    <ul class="nav-links">
+      <li><a href="docs/">Docs</a></li>
+      <li><a href="blog/">Blog</a></li>
+      <li><a href="https://github.com/turbine-stream/turbine" target="_blank" rel="noopener">GitHub</a></li>
+    </ul>
+  </div>
+</nav>
+
+<!-- ── Hero ── -->
+<header class="hero">
+  <div class="container">
+    <div class="hero-prompt">$ flux<span class="cursor"></span></div>
+    <h1>Event streaming, simplified.</h1>
+    <p class="subtitle">Replace Kafka + Schema Registry + Iceberg with a single binary. No partitions to tune. No brokers to replicate. Just S3, Postgres, and your code.</p>
+    <div class="cta-group">
+      <a href="docs/" class="cta-button cta-button--primary">&gt; Get Started</a>
+      <a href="#architecture" class="cta-button">&gt; Read the Docs</a>
+    </div>
+  </div>
+</header>
+
+<!-- ── Why not Kafka protocol? ── -->
+<section class="section" id="why-not-kafka">
+  <div class="container">
+    <h2>Why not the Kafka protocol?</h2>
+    <p>It's the first question everyone asks. The Kafka wire protocol carries deep architectural baggage that can't be papered over:</p>
+    <table class="comparison-table">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Kafka protocol</th>
+          <th>Flux</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Schema evolution</td>
+          <td>No native semantics. Bolted-on registry, burden of schema maintenance falls entirely on the end user</td>
+          <td><a href="#schema">Built into the broker.</a> Renames, deletions, and type widening tracked in code</td>
+        </tr>
+        <tr>
+          <td>Partitions</td>
+          <td>Hardwired into the protocol. Causes hotspots, prone to under-provisioning, and adding partitions silently drops data when consumers don't pick up the new partition&mdash;a common production failure</td>
+          <td>No partitions. Broker-side offset-range dispatch handles all consumers</td>
+        </tr>
+        <tr>
+          <td>API surface</td>
+          <td>89 RPCs across 60+ API keys. Complex, bug-prone, and the source of <a href="https://aphyr.com/posts/293-jepsen-kafka" target="_blank" rel="noopener">split-brain data loss</a> even in mature implementations</td>
+          <td><a href="#schema">8 message types.</a> Simple enough to audit end-to-end</td>
+        </tr>
+        <tr>
+          <td>Exactly-once</td>
+          <td>Off by default. Requires careful config of <code>transactional.id</code>, <code>isolation.level</code>, <code>enable.idempotence</code>, and <code>min.insync.replicas</code></td>
+          <td><a href="#correctness">On by default.</a> Three-level dedup (in-flight, LRU, Postgres) with no config</td>
+        </tr>
+        <tr>
+          <td>Storage</td>
+          <td>Local disks with 3&times; replication. EBS alone costs <a href="#cost">~$14,400/mo</a> at 100K events/sec</td>
+          <td>S3 with no replication overhead. <a href="#cost">~$1,580/mo</a> for the same workload</td>
+        </tr>
+        <tr>
+          <td>Durability</td>
+          <td>Depends on replication factor, ISR config, and <code>min.insync.replicas</code>. Unclean leader election loses acked writes</td>
+          <td>S3 provides 99.999999999% durability out of the box</td>
+        </tr>
+        <tr>
+          <td>Infrastructure</td>
+          <td>ZooKeeper/KRaft + replicated brokers + local disks</td>
+          <td>Stateless binary + S3 + Postgres</td>
+        </tr>
+        <tr>
+          <td>Warehouse integration</td>
+          <td>Separate topic and table abstractions. Keeping them in sync requires Kafka Connect, Debezium, or custom glue&mdash;each a source of painful inconsistencies</td>
+          <td><a href="#iceberg">One system.</a> Data lands in Iceberg tables within seconds, schema evolution carries through automatically</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>Adopting the Kafka protocol means inheriting all of these problems. Flux starts fresh with a protocol designed for disaggregated storage, built-in schemas, and zero partitions.</p>
+  </div>
+</section>
+
+<!-- ── One unified system ── -->
+<section class="section" id="unified">
+  <div class="container">
+    <h2>One system for streaming and batch</h2>
+    <p>Today, streaming and batch are separate worlds. You write to Kafka, then ETL into a warehouse, then hope the schemas stay in sync. They don't.</p>
+    <p>Flux is a single system where the same data is available for both real-time consumers and batch analytics. Write once, read as a stream or query as an Iceberg table&mdash;with the same schema, the same offsets, and the same guarantees.</p>
+    <p>Schema evolution is the connective tissue. Rename a field in your producer code and it's renamed everywhere: in the stream, in the Iceberg table, in the schema registry. No glue jobs. No reconciliation scripts. No surprises.</p>
+    <p class="callout">Write streaming. Read batch. Evolve schemas. One system.</p>
+  </div>
+</section>
+
+<!-- ── Architecture ── -->
+<section class="section" id="architecture">
+  <div class="container--wide">
+    <h2>Architecture</h2>
+    <img src="architecture.svg" alt="Flux architecture diagram" style="width:100%;">
+    <a href="docs/architecture.html" class="learn-more">Write path, read path &amp; storage format &rarr;</a>
+  </div>
+</section>
+
+<!-- ── Schema as code ── -->
+<section class="section" id="schema">
+  <div class="container">
+    <h2>Schema as code</h2>
+    <p>Define schemas as native types in your language. No <code>.proto</code> files, no Avro IDL, no build plugins, no code generation step.</p>
+    <p>Flux auto-infers Avro schemas from your types and handles evolution&mdash;renames, deletions, type widening&mdash;tracked explicitly in your code.</p>
+
+    <div class="code-tabs" id="schema-tabs">
+      <div class="tab-labels">
+        <button class="tab-label active" onclick="switchTab('schema-tabs', 0)">Java</button>
+        <button class="tab-label" onclick="switchTab('schema-tabs', 1)">Python</button>
+      </div>
+      <div class="tab-content active">
+        <div class="terminal-block"><code><span class="ann">@FluxSchema</span>(
+    namespace = <span class="str">"com.example"</span>,
+    renames = {<span class="ann">@Rename</span>(from = <span class="str">"old_name"</span>, to = <span class="str">"newName"</span>)},
+    deletions = {<span class="str">"removedField"</span>}
+)
+<span class="kw">public class</span> <span class="type">OrderEvent</span> {
+    <span class="ann">@NonNull</span> <span class="kw">public</span> <span class="type">String</span> orderId;
+    <span class="kw">public long</span> amount;
+    <span class="kw">public int</span> newName;   <span class="cm">// renamed from old_name</span>
+    <span class="kw">public</span> <span class="type">List</span>&lt;<span class="type">String</span>&gt; tags;
+}</code></div>
+      </div>
+
+      <div class="tab-content">
+        <div class="terminal-block"><code><span class="ann">@schema</span>(
+    namespace=<span class="str">"com.example"</span>,
+    renames={<span class="str">"old_name"</span>: <span class="str">"new_name"</span>},
+    deletions=[<span class="str">"removed_field"</span>],
+)
+<span class="ann">@dataclass</span>
+<span class="kw">class</span> <span class="type">OrderEvent</span>:
+    order_id: <span class="type">Annotated</span>[<span class="type">str</span>, <span class="type">NonNull</span>]
+    amount: <span class="type">int</span>
+    new_name: <span class="type">int</span>   <span class="cm"># renamed from old_name</span>
+    tags: <span class="type">list</span>[<span class="type">str</span>]</code></div>
+      </div>
+    </div>
+
+    <a href="docs/schema.html" class="learn-more">Serialization &amp; client API &rarr;</a>
+  </div>
+</section>
+
+<!-- ── Iceberg ingestion ── -->
+<section class="section" id="iceberg">
+  <div class="container">
+    <h2>Iceberg ingestion, built in</h2>
+    <p>Data appears in Iceberg tables within seconds of being written&mdash;not minutes, not hours.</p>
+    <p>The broker's flush loop pushes records directly into per-table Iceberg buffers (hot path). Schema evolution carries through automatically&mdash;rename a field in your code and it's renamed in Iceberg.</p>
+    <p>A catch-up path runs in the background, finding any un-ingested batches via anti-join and re-reading them from S3. No data loss, no manual intervention.</p>
+    <p class="callout">No Debezium. No Kafka Connect. No Iceberg connector configs. It just works.</p>
+  </div>
+</section>
+
+<!-- ── CDC ── -->
+<section class="section" id="cdc">
+  <div class="container">
+    <h2>Built-in CDC <span class="badge">coming soon</span></h2>
+    <p>Capture database changes as first-class Flux events with full schema evolution. No separate connector infrastructure, no Debezium deployment, no Kafka Connect cluster.</p>
+    <p>One system for event streaming and CDC.</p>
+  </div>
+</section>
+
+<!-- ── Storage cost comparison ── -->
+<section class="section" id="cost">
+  <div class="container">
+    <h2>9x cheaper storage</h2>
+    <p>Kafka's local-disk architecture requires 3&times; replication. Flux stores data once in S3.</p>
+    <p class="subtitle">Workload: 100,000 events/sec &middot; 1 KB avg &middot; 7-day retention &middot; AWS us-east-1</p>
+    <table class="comparison-table">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Self-managed Kafka</th>
+          <th>Amazon MSK</th>
+          <th>Flux</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Raw data</td>
+          <td>60 TB</td>
+          <td>60 TB</td>
+          <td>60 TB</td>
+        </tr>
+        <tr>
+          <td>Replication</td>
+          <td>3&times; &rarr; 180 TB</td>
+          <td>3&times; &rarr; 180 TB</td>
+          <td>None (S3 handles durability)</td>
+        </tr>
+        <tr>
+          <td>Storage cost</td>
+          <td>180 TB EBS gp3 &mdash; <strong>$14,400/mo</strong></td>
+          <td>180 TB provisioned &mdash; <strong>$18,000/mo</strong></td>
+          <td>60 TB S3 + requests &mdash; <strong>$1,580/mo</strong></td>
+        </tr>
+      </tbody>
+    </table>
+    <p>S3 eliminates replication overhead and provides 99.999999999% durability. No EBS volumes to provision, no RAID to manage, no disk failures to handle.</p>
+    <h3>The latency tradeoff</h3>
+    <p>Most mature Kafka deployments already trade latency for throughput&mdash;<code>linger.ms</code>, large batch sizes, and async replication are the norm. Flux makes that same tradeoff by design: writer-side buffering and broker-side flush batching push data to S3 in bulk, achieving <a href="#performance">1.5&ndash;1.6 GiB/s throughput</a> on a single broker.</p>
+    <p>When you need lower latency, you have knobs: use <strong>S3 Express One Zone</strong> for single-digit-millisecond object storage, and set the broker's flush interval to match your SLA. The architecture scales smoothly from high-throughput batch ingest down to near-real-time.</p>
+  </div>
+</section>
+
+<!-- ── Run anywhere ── -->
+<section class="section" id="cloud">
+  <div class="container">
+    <h2>Run anywhere</h2>
+    <p>Flux supports S3, GCS, and ABFS. Run on AWS, GCP, or Azure&mdash;or all three.</p>
+    <p>The broker is the same stateless binary everywhere. Bring your own object store, point the broker at it, and go.</p>
+    <p>No cloud lock-in. No vendor-specific APIs. Disaggregated storage means you own your data.</p>
+  </div>
+</section>
+
+<!-- ── Performance ── -->
+<section class="section" id="performance">
+  <div class="container">
+    <h2>5M events/second</h2>
+    <p>A single Flux broker handles 5 million events per second.</p>
+    <p>This is powered by a custom Avro engine that's 5&ndash;9x faster than apache-avro:</p>
+    <table class="comparison-table">
+      <thead>
+        <tr>
+          <th>Payload</th>
+          <th>Flux</th>
+          <th>apache-avro</th>
+          <th>Speedup</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Small</td>
+          <td>341 ns</td>
+          <td>3.05 &micro;s</td>
+          <td><strong>8.9x</strong></td>
+        </tr>
+        <tr>
+          <td>Medium</td>
+          <td>1.04 &micro;s</td>
+          <td>6.39 &micro;s</td>
+          <td><strong>6.1x</strong></td>
+        </tr>
+        <tr>
+          <td>Large</td>
+          <td>2.88 &micro;s</td>
+          <td>14.59 &micro;s</td>
+          <td><strong>5.1x</strong></td>
+        </tr>
+      </tbody>
+    </table>
+    <p><strong>Throughput: 1.5&ndash;1.6 GiB/s</strong> with ZSTD compression and CRC32 integrity checks on every segment.</p>
+    <a href="docs/architecture.html#performance" class="learn-more">Architecture &amp; optimizations &rarr;</a>
+  </div>
+</section>
+
+<!-- ── Correctness ── -->
+<section class="section" id="correctness">
+  <div class="container">
+    <h2>Built for correctness</h2>
+    <p>Flux ships with a built-in Jepsen-style test suite&mdash;not as an afterthought, but as a core part of the system.</p>
+    <p class="stat-line"><strong>17</strong> chaos scenarios &middot; <strong>7</strong> invariants &middot; fault injection on every path &middot; reproducible via seed</p>
+    <p>Other systems discover correctness bugs in production. We find them before you do.</p>
+    <a href="docs/correctness.html" class="learn-more">Test scenarios &amp; invariants &rarr;</a>
+  </div>
+</section>
+
+<!-- ── Footer ── -->
+<footer>
+  <div class="container">
+    <div class="footer-links">
+      <a href="docs/">Docs</a>
+      <a href="blog/">Blog</a>
+      <a href="https://github.com/turbine-stream/turbine" target="_blank" rel="noopener">GitHub</a>
+    </div>
+    <p>flux &middot; MIT License</p>
+  </div>
+</footer>
+
+<!-- ── Minimal JS for tabs ── -->
+<script>
+function switchTab(groupId, index) {
+  const group = document.getElementById(groupId);
+  const labels = group.querySelectorAll('.tab-label');
+  const contents = group.querySelectorAll('.tab-content');
+  labels.forEach((l, i) => l.classList.toggle('active', i === index));
+  contents.forEach((c, i) => c.classList.toggle('active', i === index));
+}
+</script>
+
+
+</body>
+</html>

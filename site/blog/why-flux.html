@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Why We Built Flux — Flux Blog</title>
+  <meta name="description" content="The specific problems we were solving, the design decisions we made, and the tradeoffs we accepted.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a href="../" class="wordmark">flux</a>
+    <ul class="nav-links">
+      <li><a href="../docs/">Docs</a></li>
+      <li><a href="./">Blog</a></li>
+      <li><a href="https://github.com/turbine-stream/turbine" target="_blank" rel="noopener">GitHub</a></li>
+    </ul>
+  </div>
+</nav>
+
+<article class="container--narrow">
+  <header class="post-header">
+    <h1>Why we built Flux</h1>
+    <p class="post-meta">February 2026</p>
+  </header>
+
+  <div class="post-body">
+    <p>Flux combines pub/sub&rsquo;s simple consume model, Bufstream-style stateless brokers backed by S3, and built-in Iceberg integration. It trades partition-based ordering for lower operational overhead and cost.</p>
+
+    <h2>Broker-side dispatch instead of partitions</h2>
+    <p>Kafka assigns partitions to consumers. When a consumer dies, the group rebalances. When you pick the wrong partition count, you live with it or migrate.</p>
+    <p>Flux doesn't have partitions. The broker maintains a single offset sequence per topic and dispatches offset ranges to consumers on demand. Ranges are leased&mdash;if a consumer doesn't commit within 45 seconds, the broker hands the range to someone else. No rebalancing protocol, no group coordinator, no partition topology to manage.</p>
+    <p>Flux guarantees causal ordering (if write A completes before B starts, A gets a lower offset) and per-producer ordering, but not per-key ordering.</p>
+
+    <h2>S3 instead of local disks</h2>
+    <p>Kafka brokers store segments on local disks and replicate them to follower brokers. Replication factor 3 is standard, so you store everything three times. EBS gp3 costs $0.08/GB/month. For 6 TB of data with RF=3, that's 18 TB at $1,440/month.</p>
+    <p>Flux writes directly to S3. S3 costs $0.023/GB/month and handles durability internally (11 nines). Same 6 TB costs $138/month.</p>
+    <p>The broker buffers records in memory and flushes to S3 every 100ms. Multiple producers' records are merged into a single S3 PUT&mdash;regardless of how many producers are active, you get roughly 10 PUTs per second. Each flush atomically commits batch metadata and dedup state to Postgres in a single transaction. If the PUT succeeds but the Postgres commit fails, the data is orphaned in S3 (harmless). If the commit succeeds, the batch is visible to readers.</p>
+
+    <h2>Concrete cost comparison</h2>
+    <p>Flux benchmarks at 5M events/sec on 8 cores. For this comparison we match core count at 32 vCPUs across all three setups. Workload: 100,000 events/sec, 1 KB average event size, 7-day retention, AWS us-east-1:</p>
+
+    <table class="comparison-table">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Self-managed Kafka</th>
+          <th>Amazon MSK</th>
+          <th>Flux</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Brokers</td>
+          <td>8&times; m6i.xlarge (32 vCPUs) &mdash; $1,120/mo</td>
+          <td>8&times; kafka.m5.xlarge (32 vCPUs) &mdash; $1,220/mo</td>
+          <td>1&times; c6g.8xlarge (32 vCPUs) &mdash; $800/mo</td>
+        </tr>
+        <tr>
+          <td>Storage</td>
+          <td>180 TB EBS gp3 (3&times; RF) &mdash; $14,400/mo</td>
+          <td>180 TB provisioned (3&times; RF) &mdash; $18,000/mo</td>
+          <td>60 TB S3 &mdash; $1,380/mo</td>
+        </tr>
+        <tr>
+          <td>S3 requests</td>
+          <td>&mdash;</td>
+          <td>&mdash;</td>
+          <td>PUTs + GETs &mdash; $200/mo</td>
+        </tr>
+        <tr>
+          <td>Coordination</td>
+          <td>ZooKeeper (3 nodes) &mdash; $90/mo</td>
+          <td>Included</td>
+          <td>Postgres (RDS) &mdash; $50/mo</td>
+        </tr>
+        <tr>
+          <td>Schema registry</td>
+          <td>Confluent SR &mdash; $30/mo</td>
+          <td>Glue (free)</td>
+          <td>Built in</td>
+        </tr>
+        <tr>
+          <td>Iceberg ingestion</td>
+          <td>Kafka Connect (4 workers) &mdash; $240/mo</td>
+          <td>MSK Connect (4 MCU) &mdash; $320/mo</td>
+          <td>Built in</td>
+        </tr>
+        <tr>
+          <td><strong>Total</strong></td>
+          <td><strong>~$15,900/mo</strong></td>
+          <td><strong>~$19,500/mo</strong></td>
+          <td><strong>~$2,430/mo</strong></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>With matched core counts, compute costs are comparable ($1,120 vs $800). The gap is almost entirely storage: no 3&times; replication ($14,400 &rarr; $1,380) and no Iceberg connector infrastructure ($240&ndash;$320 &rarr; $0).</p>
+    <p>At higher throughput, the ratio widens further. Kafka needs linearly more brokers and disks; Flux&rsquo;s S3 costs scale with data volume but compute stays flat.</p>
+
+    <h2>Schemas in code, not in a registry</h2>
+    <p>Confluent Schema Registry is a separate service with its own deployment, monitoring, and failure modes. Flux integrates schema management into the broker. You annotate your types with schema metadata (namespace, renames, deletions) and the SDK infers an Avro schema from the type structure. The broker validates compatibility on registration.</p>
+    <p>The practical difference: schema history lives in your code and your git history, not in a separate service's database.</p>
+
+    <h2>Iceberg without connectors</h2>
+    <p>Getting data from Kafka to Iceberg means running Kafka Connect workers, an Iceberg sink connector, connector configuration, and monitoring for each. The broker's flush loop already has the data and the schema, so Flux writes directly to Iceberg tables during flush. Schema changes propagate automatically. A background catch-up path backfills any missed batches.</p>
+
+    <h2>Tradeoffs</h2>
+    <ul>
+      <li><strong>Per-key ordering.</strong> Kafka&rsquo;s partition model gives per-key ordering through partition hashing. Flux has causal and per-producer ordering but not per-key.</li>
+      <li><strong>Ecosystem breadth.</strong> Kafka has hundreds of connectors, mature monitoring integrations, and 13 years of operational knowledge. Flux is new.</li>
+      <li><strong>Multi-datacenter replication.</strong> Kafka has MirrorMaker. Flux relies on S3 cross-region replication.</li>
+      <li><strong>Production hours.</strong> Kafka is battle-tested at enormous scale. Flux is new.</li>
+    </ul>
+    <p>If you want fewer moving parts, lower cost, and you're building on cloud infrastructure with idempotent consumers, <a href="../docs/">try Flux</a>.</p>
+  </div>
+</article>
+
+<footer>
+  <div class="container">
+    <div class="footer-links">
+      <a href="../docs/">Docs</a>
+      <a href="./">Blog</a>
+      <a href="https://github.com/turbine-stream/turbine" target="_blank" rel="noopener">GitHub</a>
+    </div>
+    <p>flux &middot; MIT License</p>
+  </div>
+</footer>
+
+</body>
+</html>

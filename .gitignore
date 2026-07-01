@@ -1,0 +1,22 @@
+# Rust
+/target
+
+# Java
+*.class
+*.jar
+**/target/
+
+# Python
+*.pyc
+**/__pycache__/
+*.egg-info/
+.venv/
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+
+# Claude
+.claude/settings.local.json

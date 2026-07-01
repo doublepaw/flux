@@ -1,0 +1,13 @@
+[package]
+name = "flux-whitepaper"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+typst-as-lib = { version = "0.14.4", features = ["typst-kit-fonts", "typst-kit-embed-fonts"] }
+typst-pdf = "0.13.1"
+

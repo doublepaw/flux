@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: flux-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: flux
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  localstack:
+    image: localstack/localstack:3.0
+    container_name: flux-localstack
+    environment:
+      SERVICES: s3
+      DEBUG: 0
+      AWS_DEFAULT_REGION: us-east-1
+    ports:
+      - "4566:4566"
+    volumes:
+      - localstack_data:/var/lib/localstack
+      - ./init-s3.sh:/etc/localstack/init/ready.d/init-s3.sh
+
+volumes:
+  postgres_data:
+  localstack_data:

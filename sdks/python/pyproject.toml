@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flux-sdk"
+version = "0.1.0"
+description = "Python SDK for Flux Event Bus"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "AGPL-3.0-only"}
+authors = [
+    {name = "Flux Team"}
+]
+dependencies = [
+    "protobuf>=5.0",
+    "websockets>=12.0",
+    "fastavro>=1.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.23",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

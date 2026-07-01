@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Built for Correctness — Flux</title>
+  <meta name="description" content="17 chaos test scenarios, fault injection on every path, 7 invariants verified after every test. Reproducible via seed.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a href="../" class="wordmark">flux</a>
+    <ul class="nav-links">
+      <li><a href="./">Docs</a></li>
+      <li><a href="../blog/">Blog</a></li>
+      <li><a href="https://github.com/turbine-stream/turbine" target="_blank" rel="noopener">GitHub</a></li>
+    </ul>
+  </div>
+</nav>
+
+<div class="docs-layout">
+  <aside class="docs-sidebar">
+    <ul>
+      <li><a href="getting-started.html">Getting started</a></li>
+      <li><a href="schema.html">Schema as code</a></li>
+      <li><a href="architecture.html">Architecture</a></li>
+      <li><a href="correctness.html" class="active">Correctness</a></li>
+    </ul>
+  </aside>
+
+  <article class="docs-main">
+    <header class="post-header">
+      <h1>Built for correctness</h1>
+    </header>
+
+    <div class="post-body">
+      <p>Flux ships with a built-in Jepsen-style test suite&mdash;not as an afterthought, but as a core part of the system.</p>
+
+      <h2>17 chaos test scenarios</h2>
+      <ul>
+        <li>Exactly-once semantics across producer kill/restart cycles</li>
+        <li>Linearizability verification with full operation history tracking</li>
+        <li>Crash recovery with watermark freshness guarantees</li>
+        <li>Network partitions between brokers, clients, and storage</li>
+        <li>Multi-broker coordination under concurrent failures</li>
+        <li>Backpressure behavior under sustained overload</li>
+        <li>Pipelined flush correctness with concurrent writers</li>
+      </ul>
+
+      <h2>Fault injection framework</h2>
+      <p>Every test runs against a faulty object store and database:</p>
+      <ul>
+        <li>S3 PUT/GET failures (transient and persistent)</li>
+        <li>S3 network partitions (black-hole mode until healed)</li>
+        <li>Configurable latency injection</li>
+        <li>Database lock contention simulation</li>
+        <li>Broker crash/restart cycles</li>
+      </ul>
+
+      <h2>7 invariants verified after every test</h2>
+      <ol>
+        <li>All acknowledged writes are visible to readers</li>
+        <li>No two writes receive the same offset</li>
+        <li>High watermark never regresses</li>
+        <li>No duplicate records across the entire history</li>
+        <li>Sequential reads never skip offsets</li>
+        <li>Causal ordering: if write A completes before write B starts, A.offset &lt; B.offset</li>
+        <li>Per-producer offsets are monotonically increasing</li>
+      </ol>
+
+      <p>Every test is reproducible via seed. Every failure is a regression test.</p>
+    </div>
+  </article>
+</div>
+
+<footer>
+  <div class="container">
+    <div class="footer-links">
+      <a href="./">Docs</a>
+      <a href="../blog/">Blog</a>
+      <a href="https://github.com/turbine-stream/turbine" target="_blank" rel="noopener">GitHub</a>
+    </div>
+    <p>flux &middot; MIT License</p>
+  </div>
+</footer>
+
+</body>
+</html>

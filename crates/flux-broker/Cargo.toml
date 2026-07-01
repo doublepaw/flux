@@ -1,0 +1,95 @@
+[package]
+name = "flux-broker"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+flux-common = { path = "../flux-common" }
+flux-wire = { path = "../flux-wire" }
+flux-schema = { path = "../flux-schema" }
+flux-iceberg = { path = "../flux-iceberg", optional = true }
+
+# Async runtime
+tokio = { workspace = true }
+tokio-util = "0.7"
+async-trait = "0.1"
+futures = "0.3"
+
+# WebSocket
+tokio-tungstenite = "0.24"
+
+# Database
+sqlx = { workspace = true }
+chrono = { workspace = true }
+
+# Data handling
+bytes = { workspace = true }
+uuid = { workspace = true }
+
+# Compression
+zstd = "0.13"
+
+# Checksums
+crc32fast = "1"
+
+# AWS SDK for S3
+aws-sdk-s3 = "1"
+aws-config = "1"
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Auth
+bcrypt = "0.15"
+rand = "0.8"
+hex = "0.4"
+
+# HTTP server for Admin API
+axum = "0.7"
+tower-http = { version = "0.5", features = ["cors"] }
+http = "1"
+
+# Tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-opentelemetry = "0.29"
+opentelemetry = "0.28"
+opentelemetry_sdk = { version = "0.28", features = ["rt-tokio", "testing"] }
+opentelemetry-otlp = { version = "0.28", features = ["trace", "grpc-tonic"] }
+
+# Metrics
+prometheus = "0.13"
+lazy_static = "1.4"
+
+# CLI for benchmarks
+clap = { version = "4", features = ["derive"] }
+hdrhistogram = "7"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+bumpalo = { version = "3", features = ["collections"] }
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
+hdrhistogram = "7"
+rand = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+clap = { version = "4", features = ["derive"] }
+tower = "0.5"
+
+[[bin]]
+name = "flux-broker"
+path = "src/bin/flux-broker.rs"
+
+[features]
+iceberg = ["dep:flux-iceberg"]
+
+[[bench]]
+name = "criterion"
+harness = false
+

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Architecture — Flux</title>
+  <meta name="description" content="Flux architecture: write path, read path, exactly-once semantics, storage format, and performance optimizations.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a href="../" class="wordmark">flux</a>
+    <ul class="nav-links">
+      <li><a href="./">Docs</a></li>
+      <li><a href="../blog/">Blog</a></li>
+      <li><a href="https://github.com/turbine-stream/turbine" target="_blank" rel="noopener">GitHub</a></li>
+    </ul>
+  </div>
+</nav>
+
+<div class="docs-layout">
+  <aside class="docs-sidebar">
+    <ul>
+      <li><a href="getting-started.html">Getting started</a></li>
+      <li><a href="schema.html">Schema as code</a></li>
+      <li><a href="architecture.html" class="active">Architecture</a></li>
+      <li><a href="correctness.html">Correctness</a></li>
+    </ul>
+  </aside>
+
+  <article class="docs-main">
+    <header class="post-header">
+      <h1>Architecture</h1>
+    </header>
+
+    <div class="post-body">
+      <img src="../architecture.svg" alt="Flux architecture diagram" style="width:100%;">
+
+      <h2>Write path</h2>
+      <p>Append &rarr; in-flight dedup &rarr; buffer merge &rarr; FL file (ZSTD + CRC32) &rarr; S3 PUT &rarr; atomic Postgres commit &rarr; ack</p>
+
+      <h2>Read path</h2>
+      <p>Query segment index &rarr; S3 range reads &rarr; per-schema record grouping &rarr; dispatch</p>
+
+      <h2>Exactly-once</h2>
+      <p>Monotonic <code>append_seq</code> per writer + three-tier dedup (in-flight &rarr; LRU cache &rarr; Postgres)</p>
+
+      <h2>Storage format (FL)</h2>
+      <p>Multiple (topic, schema) segments per file. Per-segment ZSTD compression and CRC32 verification. Varint-encoded footer for efficient S3 range reads.</p>
+
+      <h2 id="performance">Performance optimizations</h2>
+      <p>A single Flux broker handles 5 million events per second at 1.5&ndash;1.6 GiB/s throughput, powered by a custom Avro engine that's 5&ndash;9x faster than apache-avro.</p>
+      <ul>
+        <li>Zero-copy deserialization with arena allocation</li>
+        <li>Schema-driven O(1) field lookups</li>
+        <li>Varint decoding with inline fast paths</li>
+        <li>Pre-computed schema graphs with cached field indices</li>
+      </ul>
+    </div>
+  </article>
+</div>
+
+<footer>
+  <div class="container">
+    <div class="footer-links">
+      <a href="./">Docs</a>
+      <a href="../blog/">Blog</a>
+      <a href="https://github.com/turbine-stream/turbine" target="_blank" rel="noopener">GitHub</a>
+    </div>
+    <p>flux &middot; MIT License</p>
+  </div>
+</footer>
+
+</body>
+</html>

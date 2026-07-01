@@ -1,0 +1,135 @@
+name: Benchmarks
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "crates/flux-broker/**"
+      - "crates/flux-wire/**"
+      - "crates/flux-core/**"
+      - "crates/flux-common/**"
+      - "crates/flux-iceberg/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  DATABASE_URL: postgres://postgres:postgres@localhost:5433/flux
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Micro-benchmarks: FL, buffer, wire (no infra)
+  # ---------------------------------------------------------------------------
+  bench-broker-micro:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install protobuf compiler
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: bench
+          cache-on-failure: true
+
+      - name: Run micro-benchmarks
+        run: cargo bench --bench criterion -- "fl_|buffer_|wire_" --output-format bencher | tee bench-micro.txt
+
+      - name: Store benchmark results
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: Broker Micro-Benchmarks
+          tool: cargo
+          output-file-path: bench-micro.txt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          alert-threshold: "120%"
+          comment-on-alert: true
+          fail-on-alert: false
+          benchmark-data-dir-path: dev/bench
+
+  # ---------------------------------------------------------------------------
+  # DB benchmarks: commit, coordinator (needs Postgres)
+  # ---------------------------------------------------------------------------
+  bench-broker-db:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: flux
+        ports:
+          - "5433:5432"
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install protobuf compiler
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: bench
+          cache-on-failure: true
+
+      - name: Run database migrations
+        run: |
+          psql "$DATABASE_URL" -f migrations/001_init.sql
+          psql "$DATABASE_URL" -f migrations/002_iceberg.sql
+
+      - name: Run DB benchmarks
+        run: cargo bench --bench criterion -- "commit_|coordinator_" --output-format bencher | tee bench-db.txt
+
+      - name: Store benchmark results
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: Broker DB Benchmarks
+          tool: cargo
+          output-file-path: bench-db.txt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          alert-threshold: "120%"
+          comment-on-alert: true
+          fail-on-alert: false
+          benchmark-data-dir-path: dev/bench
+
+  # ---------------------------------------------------------------------------
+  # Iceberg record converter benchmark (no infra)
+  # ---------------------------------------------------------------------------
+  bench-iceberg:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install protobuf compiler
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: bench
+          cache-on-failure: true
+
+      - name: Run iceberg benchmarks
+        run: cargo bench --bench record_converter -p flux-iceberg --output-format bencher | tee bench-iceberg.txt
+
+      - name: Store benchmark results
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: Iceberg Benchmarks
+          tool: cargo
+          output-file-path: bench-iceberg.txt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          alert-threshold: "120%"
+          comment-on-alert: true
+          fail-on-alert: false
+          benchmark-data-dir-path: dev/bench

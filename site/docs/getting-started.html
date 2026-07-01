@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Getting Started — Flux</title>
+  <meta name="description" content="Get up and running with Flux in minutes. Start Postgres, launch the broker, create a topic, and stream events.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a href="../" class="wordmark">flux</a>
+    <ul class="nav-links">
+      <li><a href="./">Docs</a></li>
+      <li><a href="../blog/">Blog</a></li>
+      <li><a href="https://github.com/turbine-stream/turbine" target="_blank" rel="noopener">GitHub</a></li>
+    </ul>
+  </div>
+</nav>
+
+<div class="docs-layout">
+  <aside class="docs-sidebar">
+    <ul>
+      <li><a href="getting-started.html" class="active">Getting started</a></li>
+      <li><a href="schema.html">Schema as code</a></li>
+      <li><a href="architecture.html">Architecture</a></li>
+      <li><a href="correctness.html">Correctness</a></li>
+    </ul>
+  </aside>
+
+  <article class="docs-main">
+    <header class="post-header">
+      <h1>Getting started</h1>
+    </header>
+
+    <div class="post-body">
+      <h2>1. Start Postgres</h2>
+      <div class="terminal-block"><code><span class="prompt">$ </span>cd docker && docker-compose up -d</code></div>
+
+      <h2>2. Start the broker</h2>
+      <div class="terminal-block"><code><span class="prompt">$ </span>export DATABASE_URL=postgres://postgres:postgres@localhost:5433/flux
+<span class="prompt">$ </span>flux-broker</code></div>
+
+      <h2>3. Create a topic and start streaming</h2>
+      <div class="terminal-block"><code><span class="comment"># Bootstrap your API key</span>
+<span class="prompt">$ </span>flux bootstrap
+<span class="prompt">$ </span>export FLUX_API_KEY=tb_...
+
+<span class="comment"># Create a topic</span>
+<span class="prompt">$ </span>flux topic create my-events
+
+<span class="comment"># Write events</span>
+<span class="prompt">$ </span>flux write --topic my-events '{"name": "alice", "amount": 100}'
+
+<span class="comment"># Tail events in real-time</span>
+<span class="prompt">$ </span>flux tail --topic my-events</code></div>
+    </div>
+  </article>
+</div>
+
+<footer>
+  <div class="container">
+    <div class="footer-links">
+      <a href="./">Docs</a>
+      <a href="../blog/">Blog</a>
+      <a href="https://github.com/turbine-stream/turbine" target="_blank" rel="noopener">GitHub</a>
+    </div>
+    <p>flux &middot; MIT License</p>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,27 @@
+#!/bin/sh
+# Reject pushes to doublepaw remotes when any outgoing commit has an
+# author or committer email that is not @gmail.com.
+remote_url="$2"
+case "$remote_url" in
+  *github.com[/:]doublepaw/*) ;;
+  *) exit 0 ;;
+esac
+
+zero=0000000000000000000000000000000000000000
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "$zero" ] && continue  # branch deletion
+  if [ "$remote_sha" = "$zero" ]; then
+    range="$local_sha --not --remotes=origin"  # new branch: only commits not already on the remote
+  else
+    range="$remote_sha..$local_sha"
+  fi
+  bad=$(git log --format='%h author=%ae committer=%ce' $range |
+    awk '$2 !~ /@gmail\.com$/ || $3 !~ /@gmail\.com$/')
+  if [ -n "$bad" ]; then
+    echo "pre-push: blocked — commits with non-@gmail.com emails bound for doublepaw:" >&2
+    echo "$bad" >&2
+    echo "fix with: git config user.email <you>@gmail.com && git rebase -i --exec 'git commit --amend --reset-author --no-edit'" >&2
+    exit 1
+  fi
+done
+exit 0

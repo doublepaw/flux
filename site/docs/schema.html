@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Schema as Code — Flux</title>
+  <meta name="description" content="Define schemas as native types in your language. No .proto files, no Avro IDL, no code generation step.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a href="../" class="wordmark">flux</a>
+    <ul class="nav-links">
+      <li><a href="./">Docs</a></li>
+      <li><a href="../blog/">Blog</a></li>
+      <li><a href="https://github.com/turbine-stream/turbine" target="_blank" rel="noopener">GitHub</a></li>
+    </ul>
+  </div>
+</nav>
+
+<div class="docs-layout">
+  <aside class="docs-sidebar">
+    <ul>
+      <li><a href="getting-started.html">Getting started</a></li>
+      <li><a href="schema.html" class="active">Schema as code</a></li>
+      <li><a href="architecture.html">Architecture</a></li>
+      <li><a href="correctness.html">Correctness</a></li>
+    </ul>
+  </aside>
+
+  <article class="docs-main">
+    <header class="post-header">
+      <h1>Schema as code</h1>
+    </header>
+
+    <div class="post-body">
+      <p>Define schemas as native types in your language. No <code>.proto</code> files, no Avro IDL, no build plugins, no code generation step.</p>
+      <p>Flux auto-infers Avro schemas from your types and handles evolution&mdash;renames, deletions, type widening&mdash;tracked explicitly in your code.</p>
+
+      <h2>Schema definition</h2>
+
+      <div class="code-tabs" id="def-tabs">
+        <div class="tab-labels">
+          <button class="tab-label active" onclick="switchTab('def-tabs', 0)">Java</button>
+          <button class="tab-label" onclick="switchTab('def-tabs', 1)">Python</button>
+        </div>
+        <div class="tab-content active">
+          <div class="terminal-block"><code><span class="ann">@FluxSchema</span>(namespace = <span class="str">"com.example"</span>)
+<span class="kw">public class</span> <span class="type">OrderEvent</span> {
+    <span class="ann">@NonNull</span> <span class="kw">public</span> <span class="type">String</span> orderId;
+    <span class="kw">public long</span> amount;
+    <span class="kw">public</span> <span class="type">List</span>&lt;<span class="type">String</span>&gt; tags;
+}
+
+<span class="cm">// Serialize</span>
+<span class="kw">byte</span>[] data = <span class="type">Schemas</span>.toBytes(event);
+
+<span class="cm">// Deserialize</span>
+<span class="type">OrderEvent</span> restored = <span class="type">Schemas</span>.fromBytes(<span class="type">OrderEvent</span>.<span class="kw">class</span>, data);</code></div>
+        </div>
+        <div class="tab-content">
+          <div class="terminal-block"><code><span class="ann">@schema</span>(namespace=<span class="str">"com.example"</span>)
+<span class="ann">@dataclass</span>
+<span class="kw">class</span> <span class="type">OrderEvent</span>:
+    order_id: <span class="type">Annotated</span>[<span class="type">str</span>, <span class="type">NonNull</span>]
+    amount: <span class="type">int</span>
+    tags: <span class="type">list</span>[<span class="type">str</span>]
+
+<span class="cm"># Serialize</span>
+data: <span class="type">bytes</span> = event.to_bytes()
+
+<span class="cm"># Deserialize</span>
+restored: <span class="type">OrderEvent</span> = <span class="type">OrderEvent</span>.from_bytes(data)</code></div>
+        </div>
+      </div>
+
+      <h2>Schema evolution</h2>
+      <p>Evolution is explicit&mdash;renames, deletions, and type widening are tracked directly in your code:</p>
+
+      <div class="code-tabs" id="evo-tabs">
+        <div class="tab-labels">
+          <button class="tab-label active" onclick="switchTab('evo-tabs', 0)">Java</button>
+          <button class="tab-label" onclick="switchTab('evo-tabs', 1)">Python</button>
+        </div>
+        <div class="tab-content active">
+          <div class="terminal-block"><code><span class="ann">@FluxSchema</span>(
+    namespace = <span class="str">"com.example"</span>,
+    renames = {<span class="ann">@Rename</span>(from = <span class="str">"old_name"</span>, to = <span class="str">"newName"</span>)},
+    deletions = {<span class="str">"removedField"</span>}
+)
+<span class="kw">public class</span> <span class="type">OrderEvent</span> {
+    <span class="ann">@NonNull</span> <span class="kw">public</span> <span class="type">String</span> orderId;
+    <span class="kw">public long</span> amount;
+    <span class="kw">public int</span> newName;   <span class="cm">// renamed from old_name</span>
+    <span class="cm">// removedField — deleted, old data still readable</span>
+}</code></div>
+        </div>
+        <div class="tab-content">
+          <div class="terminal-block"><code><span class="ann">@schema</span>(
+    namespace=<span class="str">"com.example"</span>,
+    renames={<span class="str">"old_name"</span>: <span class="str">"new_name"</span>},
+    deletions=[<span class="str">"removed_field"</span>],
+)
+<span class="ann">@dataclass</span>
+<span class="kw">class</span> <span class="type">OrderEvent</span>:
+    order_id: <span class="type">Annotated</span>[<span class="type">str</span>, <span class="type">NonNull</span>]
+    amount: <span class="type">int</span>
+    new_name: <span class="type">int</span>   <span class="cm"># renamed from old_name</span>
+    <span class="cm"># removed_field — deleted, old data still readable</span></code></div>
+        </div>
+      </div>
+
+      <h2>High-level client</h2>
+      <p>Send and consume events with a single line of code:</p>
+
+      <div class="code-tabs" id="client-tabs">
+        <div class="tab-labels">
+          <button class="tab-label active" onclick="switchTab('client-tabs', 0)">Java</button>
+          <button class="tab-label" onclick="switchTab('client-tabs', 1)">Python</button>
+        </div>
+        <div class="tab-content active">
+          <div class="terminal-block"><code><span class="kw">try</span> (<span class="type">FluxClient</span> client = <span class="type">FluxClient</span>.connect(config)) {
+    <span class="cm">// Send</span>
+    client.send(<span class="kw">new</span> <span class="type">OrderEvent</span>(<span class="str">"abc"</span>, <span class="num">100</span>));
+
+    <span class="cm">// Consume</span>
+    client.consume(<span class="type">OrderEvent</span>.<span class="kw">class</span>, <span class="str">"my-group"</span>, event -&gt; {
+        <span class="type">System</span>.out.println(event.orderId);
+    });
+}</code></div>
+        </div>
+        <div class="tab-content">
+          <div class="terminal-block"><code><span class="kw">async with</span> <span class="type">FluxClient</span>.connect(config) <span class="kw">as</span> client:
+    <span class="kw">await</span> client.send(<span class="type">OrderEvent</span>(order_id=<span class="str">"abc"</span>, amount=<span class="num">100</span>))
+
+    <span class="kw">async for</span> event <span class="kw">in</span> client.consume(<span class="type">OrderEvent</span>, group_id=<span class="str">"my-group"</span>):
+        print(event.order_id)</code></div>
+        </div>
+      </div>
+    </div>
+  </article>
+</div>
+
+<footer>
+  <div class="container">
+    <div class="footer-links">
+      <a href="./">Docs</a>
+      <a href="../blog/">Blog</a>
+      <a href="https://github.com/turbine-stream/turbine" target="_blank" rel="noopener">GitHub</a>
+    </div>
+    <p>flux &middot; MIT License</p>
+  </div>
+</footer>
+
+<script>
+function switchTab(groupId, index) {
+  const group = document.getElementById(groupId);
+  const labels = group.querySelectorAll('.tab-label');
+  const contents = group.querySelectorAll('.tab-content');
+  labels.forEach((l, i) => l.classList.toggle('active', i === index));
+  contents.forEach((c, i) => c.classList.toggle('active', i === index));
+}
+</script>
+
+</body>
+</html>
