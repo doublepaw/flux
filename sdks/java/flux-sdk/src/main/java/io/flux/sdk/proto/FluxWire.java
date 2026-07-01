@@ -145,79 +145,76 @@ public final class FluxWire extends com.google.protobuf.GeneratedFile {
       descriptor;
   static {
     java.lang.String[] descriptorData = {
-      "\n\023flux_wire.proto\022\rflux.wire\"1\n\006" +
-      "Record\022\020\n\003key\030\001 \001(\014H\000\210\001\001\022\r\n\005value\030\002 \001(\014B" +
-      "\006\n\004_key\"Z\n\013RecordBatch\022\020\n\010topic_id\030\001 \001(\r" +
-      "\022\021\n\tschema_id\030\002 \001(\r\022&\n\007records\030\003 \003(\0132\025.f" +
-      "lourine.wire.Record\"Y\n\010BatchAck\022\020\n\010topic" +
-      "_id\030\001 \001(\r\022\021\n\tschema_id\030\002 \001(\r\022\024\n\014start_of" +
-      "fset\030\003 \001(\004\022\022\n\nend_offset\030\004 \001(\004\"c\n\rAppend" +
-      "Request\022\021\n\twriter_id\030\001 \001(\014\022\022\n\nappend_seq" +
-      "\030\002 \001(\004\022+\n\007batches\030\003 \003(\0132\032.flux.wire." +
-      "RecordBatch\"\216\001\n\016AppendResponse\022\022\n\nappend" +
-      "_seq\030\001 \001(\004\022\017\n\007success\030\002 \001(\010\022\022\n\nerror_cod" +
-      "e\030\003 \001(\r\022\025\n\rerror_message\030\004 \001(\t\022,\n\013append" +
-      "_acks\030\005 \003(\0132\027.flux.wire.BatchAck\"B\n\013" +
-      "ReadRequest\022\020\n\010topic_id\030\001 \001(\r\022\016\n\006offset\030" +
-      "\002 \001(\004\022\021\n\tmax_bytes\030\003 \001(\r\"r\n\013TopicResult\022" +
-      "\020\n\010topic_id\030\001 \001(\r\022\021\n\tschema_id\030\002 \001(\r\022\026\n\016" +
-      "high_watermark\030\003 \001(\004\022&\n\007records\030\004 \003(\0132\025." +
-      "flux.wire.Record\"w\n\014ReadResponse\022\017\n\007" +
+      "\n\017flux_wire.proto\022\tflux.wire\"1\n\006Record\022\020" +
+      "\n\003key\030\001 \001(\014H\000\210\001\001\022\r\n\005value\030\002 \001(\014B\006\n\004_key\"" +
+      "V\n\013RecordBatch\022\020\n\010topic_id\030\001 \001(\r\022\021\n\tsche" +
+      "ma_id\030\002 \001(\r\022\"\n\007records\030\003 \003(\0132\021.flux.wire" +
+      ".Record\"Y\n\010BatchAck\022\020\n\010topic_id\030\001 \001(\r\022\021\n" +
+      "\tschema_id\030\002 \001(\r\022\024\n\014start_offset\030\003 \001(\004\022\022" +
+      "\n\nend_offset\030\004 \001(\004\"_\n\rAppendRequest\022\021\n\tw" +
+      "riter_id\030\001 \001(\014\022\022\n\nappend_seq\030\002 \001(\004\022\'\n\007ba" +
+      "tches\030\003 \003(\0132\026.flux.wire.RecordBatch\"\212\001\n\016" +
+      "AppendResponse\022\022\n\nappend_seq\030\001 \001(\004\022\017\n\007su" +
+      "ccess\030\002 \001(\010\022\022\n\nerror_code\030\003 \001(\r\022\025\n\rerror" +
+      "_message\030\004 \001(\t\022(\n\013append_acks\030\005 \003(\0132\023.fl" +
+      "ux.wire.BatchAck\"B\n\013ReadRequest\022\020\n\010topic" +
+      "_id\030\001 \001(\r\022\016\n\006offset\030\002 \001(\004\022\021\n\tmax_bytes\030\003" +
+      " \001(\r\"n\n\013TopicResult\022\020\n\010topic_id\030\001 \001(\r\022\021\n" +
+      "\tschema_id\030\002 \001(\r\022\026\n\016high_watermark\030\003 \001(\004" +
+      "\022\"\n\007records\030\004 \003(\0132\021.flux.wire.Record\"s\n\014" +
+      "ReadResponse\022\017\n\007success\030\001 \001(\010\022\022\n\nerror_c" +
+      "ode\030\002 \001(\r\022\025\n\rerror_message\030\003 \001(\t\022\'\n\007resu" +
+      "lts\030\004 \003(\0132\026.flux.wire.TopicResult\"J\n\020Joi" +
+      "nGroupRequest\022\020\n\010group_id\030\001 \001(\t\022\021\n\treade" +
+      "r_id\030\002 \001(\t\022\021\n\ttopic_ids\030\003 \003(\r\"O\n\021JoinGro" +
+      "upResponse\022\017\n\007success\030\001 \001(\010\022\022\n\nerror_cod" +
+      "e\030\002 \001(\r\022\025\n\rerror_message\030\003 \001(\t\"I\n\020Heartb" +
+      "eatRequest\022\020\n\010group_id\030\001 \001(\t\022\020\n\010topic_id" +
+      "\030\002 \001(\r\022\021\n\treader_id\030\003 \001(\t\"{\n\021HeartbeatRe" +
+      "sponse\022\017\n\007success\030\001 \001(\010\022\022\n\nerror_code\030\002 " +
+      "\001(\r\022\025\n\rerror_message\030\003 \001(\t\022*\n\006status\030\004 \001" +
+      "(\0162\032.flux.wire.HeartbeatStatus\"W\n\013PollRe" +
+      "quest\022\020\n\010group_id\030\001 \001(\t\022\020\n\010topic_id\030\002 \001(" +
+      "\r\022\021\n\treader_id\030\003 \001(\t\022\021\n\tmax_bytes\030\004 \001(\r\"" +
+      "\270\001\n\014PollResponse\022\017\n\007success\030\001 \001(\010\022\022\n\nerr" +
+      "or_code\030\002 \001(\r\022\025\n\rerror_message\030\003 \001(\t\022\'\n\007" +
+      "results\030\004 \003(\0132\026.flux.wire.TopicResult\022\024\n" +
+      "\014start_offset\030\005 \001(\004\022\022\n\nend_offset\030\006 \001(\004\022" +
+      "\031\n\021lease_deadline_ms\030\007 \001(\004\"J\n\021LeaveGroup" +
+      "Request\022\020\n\010group_id\030\001 \001(\t\022\020\n\010topic_id\030\002 " +
+      "\001(\r\022\021\n\treader_id\030\003 \001(\t\"P\n\022LeaveGroupResp" +
+      "onse\022\017\n\007success\030\001 \001(\010\022\022\n\nerror_code\030\002 \001(" +
+      "\r\022\025\n\rerror_message\030\003 \001(\t\"p\n\rCommitReques" +
+      "t\022\020\n\010group_id\030\001 \001(\t\022\021\n\treader_id\030\002 \001(\t\022\020" +
+      "\n\010topic_id\030\003 \001(\r\022\024\n\014start_offset\030\004 \001(\004\022\022" +
+      "\n\nend_offset\030\005 \001(\004\"L\n\016CommitResponse\022\017\n\007" +
       "success\030\001 \001(\010\022\022\n\nerror_code\030\002 \001(\r\022\025\n\rerr" +
-      "or_message\030\003 \001(\t\022+\n\007results\030\004 \003(\0132\032.flou" +
-      "rine.wire.TopicResult\"J\n\020JoinGroupReques" +
-      "t\022\020\n\010group_id\030\001 \001(\t\022\021\n\treader_id\030\002 \001(\t\022\021" +
-      "\n\ttopic_ids\030\003 \003(\r\"O\n\021JoinGroupResponse\022\017" +
-      "\n\007success\030\001 \001(\010\022\022\n\nerror_code\030\002 \001(\r\022\025\n\re" +
-      "rror_message\030\003 \001(\t\"I\n\020HeartbeatRequest\022\020" +
-      "\n\010group_id\030\001 \001(\t\022\020\n\010topic_id\030\002 \001(\r\022\021\n\tre" +
-      "ader_id\030\003 \001(\t\"\177\n\021HeartbeatResponse\022\017\n\007su" +
-      "ccess\030\001 \001(\010\022\022\n\nerror_code\030\002 \001(\r\022\025\n\rerror" +
-      "_message\030\003 \001(\t\022.\n\006status\030\004 \001(\0162\036.flourin" +
-      "e.wire.HeartbeatStatus\"W\n\013PollRequest\022\020\n" +
-      "\010group_id\030\001 \001(\t\022\020\n\010topic_id\030\002 \001(\r\022\021\n\trea" +
-      "der_id\030\003 \001(\t\022\021\n\tmax_bytes\030\004 \001(\r\"\274\001\n\014Poll" +
-      "Response\022\017\n\007success\030\001 \001(\010\022\022\n\nerror_code\030" +
-      "\002 \001(\r\022\025\n\rerror_message\030\003 \001(\t\022+\n\007results\030" +
-      "\004 \003(\0132\032.flux.wire.TopicResult\022\024\n\014sta" +
-      "rt_offset\030\005 \001(\004\022\022\n\nend_offset\030\006 \001(\004\022\031\n\021l" +
-      "ease_deadline_ms\030\007 \001(\004\"J\n\021LeaveGroupRequ" +
-      "est\022\020\n\010group_id\030\001 \001(\t\022\020\n\010topic_id\030\002 \001(\r\022" +
-      "\021\n\treader_id\030\003 \001(\t\"P\n\022LeaveGroupResponse" +
-      "\022\017\n\007success\030\001 \001(\010\022\022\n\nerror_code\030\002 \001(\r\022\025\n" +
-      "\rerror_message\030\003 \001(\t\"p\n\rCommitRequest\022\020\n" +
-      "\010group_id\030\001 \001(\t\022\021\n\treader_id\030\002 \001(\t\022\020\n\010to" +
-      "pic_id\030\003 \001(\r\022\024\n\014start_offset\030\004 \001(\004\022\022\n\nen" +
-      "d_offset\030\005 \001(\004\"L\n\016CommitResponse\022\017\n\007succ" +
-      "ess\030\001 \001(\010\022\022\n\nerror_code\030\002 \001(\r\022\025\n\rerror_m" +
-      "essage\030\003 \001(\t\"\036\n\013AuthRequest\022\017\n\007api_key\030\001" +
-      " \001(\t\"J\n\014AuthResponse\022\017\n\007success\030\001 \001(\010\022\022\n" +
-      "\nerror_code\030\002 \001(\r\022\025\n\rerror_message\030\003 \001(\t" +
-      "\"\244\003\n\rClientMessage\022.\n\006append\030\001 \001(\0132\034.flo" +
-      "urine.wire.AppendRequestH\000\022*\n\004read\030\002 \001(\013" +
-      "2\032.flux.wire.ReadRequestH\000\0225\n\njoin_g" +
-      "roup\030\003 \001(\0132\037.flux.wire.JoinGroupRequ" +
-      "estH\000\0224\n\theartbeat\030\004 \001(\0132\037.flux.wire" +
-      ".HeartbeatRequestH\000\022*\n\004poll\030\005 \001(\0132\032.flou" +
-      "rine.wire.PollRequestH\000\0227\n\013leave_group\030\006" +
-      " \001(\0132 .flux.wire.LeaveGroupRequestH\000" +
-      "\022.\n\006commit\030\007 \001(\0132\034.flux.wire.CommitR" +
-      "equestH\000\022*\n\004auth\030\010 \001(\0132\032.flux.wire.A" +
-      "uthRequestH\000B\t\n\007message\"\254\003\n\rServerMessag" +
-      "e\022/\n\006append\030\001 \001(\0132\035.flux.wire.Append" +
-      "ResponseH\000\022+\n\004read\030\002 \001(\0132\033.flux.wire" +
-      ".ReadResponseH\000\0226\n\njoin_group\030\003 \001(\0132 .fl" +
-      "ourine.wire.JoinGroupResponseH\000\0225\n\theart" +
-      "beat\030\004 \001(\0132 .flux.wire.HeartbeatResp" +
-      "onseH\000\022+\n\004poll\030\005 \001(\0132\033.flux.wire.Pol" +
-      "lResponseH\000\0228\n\013leave_group\030\006 \001(\0132!.flour" +
-      "ine.wire.LeaveGroupResponseH\000\022/\n\006commit\030" +
-      "\007 \001(\0132\035.flux.wire.CommitResponseH\000\022+" +
-      "\n\004auth\030\010 \001(\0132\033.flux.wire.AuthRespons" +
-      "eH\000B\t\n\007message*O\n\017HeartbeatStatus\022\027\n\023HEA" +
-      "RTBEAT_STATUS_OK\020\000\022#\n\037HEARTBEAT_STATUS_U" +
-      "NKNOWN_MEMBER\020\001B\031\n\025io.flux.sdk.proto" +
-      "P\001b\006proto3"
+      "or_message\030\003 \001(\t\"\036\n\013AuthRequest\022\017\n\007api_k" +
+      "ey\030\001 \001(\t\"J\n\014AuthResponse\022\017\n\007success\030\001 \001(" +
+      "\010\022\022\n\nerror_code\030\002 \001(\r\022\025\n\rerror_message\030\003" +
+      " \001(\t\"\204\003\n\rClientMessage\022*\n\006append\030\001 \001(\0132\030" +
+      ".flux.wire.AppendRequestH\000\022&\n\004read\030\002 \001(\013" +
+      "2\026.flux.wire.ReadRequestH\000\0221\n\njoin_group" +
+      "\030\003 \001(\0132\033.flux.wire.JoinGroupRequestH\000\0220\n" +
+      "\theartbeat\030\004 \001(\0132\033.flux.wire.HeartbeatRe" +
+      "questH\000\022&\n\004poll\030\005 \001(\0132\026.flux.wire.PollRe" +
+      "questH\000\0223\n\013leave_group\030\006 \001(\0132\034.flux.wire" +
+      ".LeaveGroupRequestH\000\022*\n\006commit\030\007 \001(\0132\030.f" +
+      "lux.wire.CommitRequestH\000\022&\n\004auth\030\010 \001(\0132\026" +
+      ".flux.wire.AuthRequestH\000B\t\n\007message\"\214\003\n\r" +
+      "ServerMessage\022+\n\006append\030\001 \001(\0132\031.flux.wir" +
+      "e.AppendResponseH\000\022\'\n\004read\030\002 \001(\0132\027.flux." +
+      "wire.ReadResponseH\000\0222\n\njoin_group\030\003 \001(\0132" +
+      "\034.flux.wire.JoinGroupResponseH\000\0221\n\theart" +
+      "beat\030\004 \001(\0132\034.flux.wire.HeartbeatResponse" +
+      "H\000\022\'\n\004poll\030\005 \001(\0132\027.flux.wire.PollRespons" +
+      "eH\000\0224\n\013leave_group\030\006 \001(\0132\035.flux.wire.Lea" +
+      "veGroupResponseH\000\022+\n\006commit\030\007 \001(\0132\031.flux" +
+      ".wire.CommitResponseH\000\022\'\n\004auth\030\010 \001(\0132\027.f" +
+      "lux.wire.AuthResponseH\000B\t\n\007message*O\n\017He" +
+      "artbeatStatus\022\027\n\023HEARTBEAT_STATUS_OK\020\000\022#" +
+      "\n\037HEARTBEAT_STATUS_UNKNOWN_MEMBER\020\001B\025\n\021i" +
+      "o.flux.sdk.protoP\001b\006proto3"
     };
     descriptor = com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
