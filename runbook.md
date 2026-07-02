@@ -174,5 +174,8 @@ az group delete -n $RG --yes --no-wait
 |---|---|---|---|---|---|
 | local | 1 broker proc, local FS, shared 32-core box | 858 | 422 | 386 / 431 | baseline after read-path fix |
 | AWS | EKS 2×c6i.4xlarge, S3 (IRSA, bucket-scoped policy) | 775 | 192 | 414 / 520 | 12.8M rec ×1KB; produce 16.1s, fetch 65.0s |
+| AWS v2 | same + segment cap 256MB, 256MB reads, read-ahead 2GB | 807 | **407** | 398 / 574 | fetch 2.1×: 65.0s → 30.7s |
+| local v2 | same box as local, segment cap + read-ahead 4GB | 1,267 | **592** | 262 / 317 | produce also +48% (encode capacity fix) |
 | GCP | — | — | — | — | pending |
 | Azure | AKS 2×D16s_v5, Blob (account key), bench+broker on separate nodes | 1,045 | 210 | 299 / 501 | 12.8M rec ×1KB; produce 12.0s, fetch 59.4s |
+| Azure v2 | same + segment cap 256MB, 256MB reads, read-ahead 4GB | 1,026 | **713** | 297 / 535 | fetch 3.4×: 59.4s → 17.5s |
