@@ -81,9 +81,9 @@ gcloud services enable container.googleapis.com cloudbuild.googleapis.com artifa
 gcloud storage buckets create gs://$BUCKET --location=$REGION
 gcloud artifacts repositories create flux --repository-format=docker --location=us
 
-# 2. Build image remotely with Cloud Build (uploads repo incl. target/release)
-gcloud builds submit --tag us-docker.pkg.dev/$PROJECT/flux/flux:latest \
-  --timeout=20m --ignore-file=.gcloudignore-none .
+# 2. Build image remotely with Cloud Build (uploads context per .gcloudignore,
+#    which must include target/release/flux-{broker,bench})
+gcloud builds submit --config deploy/docker/cloudbuild.yaml --timeout=20m .
 
 # 3. GKE cluster (2 × c2-standard-30)
 gcloud container clusters create $CLUSTER --region $REGION \
@@ -97,6 +97,13 @@ gcloud storage buckets add-iam-policy-binding gs://$BUCKET \
   --member serviceAccount:flux-bench@$PROJECT.iam.gserviceaccount.com --role roles/storage.objectAdmin
 gcloud iam service-accounts add-iam-policy-binding flux-bench@$PROJECT.iam.gserviceaccount.com \
   --member "serviceAccount:$PROJECT.svc.id.goog[default/flux-broker]" --role roles/iam.workloadIdentityUser
+
+# 4-alt. No-new-IAM fallback (uses the existing Compute default SA): give the
+# node pool storage scopes + legacy metadata, and skip the SA annotation.
+gcloud container node-pools create storage-pool --cluster $CLUSTER --region $REGION \
+  --num-nodes 2 --machine-type c2-standard-30 --node-locations $REGION-a \
+  --scopes gke-default,storage-full --workload-metadata=GCE_METADATA
+gcloud container node-pools delete default-pool --cluster $CLUSTER --region $REGION --quiet
 
 # 5. Deploy
 kubectl create configmap flux-migrations --from-file=migrations/001_init.sql

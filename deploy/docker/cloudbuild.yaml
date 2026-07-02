@@ -1,0 +1,11 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - deploy/docker/Dockerfile
+      - -t
+      - us-docker.pkg.dev/$PROJECT_ID/flux/flux:latest
+      - .
+images:
+  - us-docker.pkg.dev/$PROJECT_ID/flux/flux:latest

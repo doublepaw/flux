@@ -1,0 +1,16 @@
+# Upload only what the image build needs: Dockerfile, binaries, migrations.
+.git
+node_modules
+site
+sdks
+crates
+proto
+tests
+xtask
+docs
+docker
+target/*
+!target/release
+target/release/*
+!target/release/flux-broker
+!target/release/flux-bench
