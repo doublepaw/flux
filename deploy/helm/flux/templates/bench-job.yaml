@@ -1,0 +1,36 @@
+{{- if .Values.bench.enabled }}
+{{- $dbUrl := .Values.postgres.externalUrl | default (printf "postgres://postgres:%s@%s-postgres:5432/%s" .Values.postgres.password .Release.Name .Values.postgres.database) }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-bench-{{ now | unixEpoch }}
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-bench
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: bench
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/usr/local/bin/flux-bench"]
+          args:
+            - remote
+            - --url=ws://{{ .Release.Name }}-broker:9000
+            - --database-url={{ $dbUrl }}
+            - --topic={{ .Values.bench.topic }}
+            - --writers={{ .Values.bench.writers }}
+            - --requests-per-writer={{ .Values.bench.requestsPerWriter }}
+            - --records-per-batch={{ .Values.bench.recordsPerBatch }}
+            - --record-size={{ .Values.bench.recordSize }}
+            - --max-in-flight={{ .Values.bench.maxInFlight }}
+            - --fetch-readers={{ .Values.bench.fetchReaders }}
+            {{- if .Values.bench.skipFetch }}
+            - --skip-fetch
+            {{- end }}
+          resources:
+            {{- toYaml .Values.bench.resources | nindent 12 }}
+{{- end }}

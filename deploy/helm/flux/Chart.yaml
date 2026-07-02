@@ -1,0 +1,6 @@
+apiVersion: v2
+name: flux
+description: Flux event streaming broker + benchmark harness
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

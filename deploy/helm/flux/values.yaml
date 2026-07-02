@@ -1,0 +1,63 @@
+image:
+  repository: flux
+  tag: latest
+  pullPolicy: IfNotPresent
+
+broker:
+  replicas: 1
+  # fs | s3 | gcs | azure
+  objectStore: fs
+  bucket: flux
+  keyPrefix: bench
+  flushIntervalMs: 50
+  pgPoolSize: 50
+  resources:
+    requests:
+      cpu: "8"
+      memory: 16Gi
+    limits:
+      cpu: "16"
+      memory: 24Gi
+  # Extra env vars (e.g. AZURE_STORAGE_ACCOUNT_NAME, S3_ENDPOINT)
+  extraEnv: []
+
+serviceAccount:
+  create: true
+  name: flux-broker
+  # Cloud identity annotations:
+  #   AWS IRSA:  eks.amazonaws.com/role-arn: arn:aws:iam::<acct>:role/<role>
+  #   GKE WI:    iam.gke.io/gcp-service-account: <gsa>@<project>.iam.gserviceaccount.com
+  #   Azure WI:  azure.workload.identity/client-id: <client-id>
+  annotations: {}
+
+postgres:
+  # In-cluster single-node Postgres for benchmarks. Set enabled=false and
+  # externalUrl to use a managed database instead.
+  enabled: true
+  image: postgres:16
+  password: flux
+  database: flux
+  maxConnections: 500
+  sharedBuffers: 2GB
+  storage: emptyDir  # benchmark-only; data is disposable
+  resources:
+    requests:
+      cpu: "4"
+      memory: 8Gi
+  externalUrl: ""
+
+bench:
+  # Render the benchmark Job (helm upgrade --set bench.enabled=true ...)
+  enabled: false
+  topic: bench
+  writers: 40
+  requestsPerWriter: 2500
+  recordsPerBatch: 128
+  recordSize: 1024
+  maxInFlight: 64
+  fetchReaders: 8
+  skipFetch: false
+  resources:
+    requests:
+      cpu: "8"
+      memory: 8Gi
