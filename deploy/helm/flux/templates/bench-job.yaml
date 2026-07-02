@@ -28,7 +28,7 @@ spec:
             - --record-size={{ .Values.bench.recordSize }}
             - --max-in-flight={{ .Values.bench.maxInFlight }}
             - --fetch-readers={{ .Values.bench.fetchReaders }}
-            - --max-bytes={{ .Values.bench.maxBytes }}
+            - --max-bytes={{ .Values.bench.maxBytes | int }}
             {{- if .Values.bench.skipFetch }}
             - --skip-fetch
             {{- end }}

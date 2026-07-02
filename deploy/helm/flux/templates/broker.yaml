@@ -35,9 +35,9 @@ spec:
             - name: FLUSH_INTERVAL_MS
               value: {{ .Values.broker.flushIntervalMs | quote }}
             - name: SEGMENT_MAX_BYTES
-              value: {{ .Values.broker.segmentMaxBytes | quote }}
+              value: {{ .Values.broker.segmentMaxBytes | int | quote }}
             - name: READAHEAD_MAX_BYTES
-              value: {{ .Values.broker.readaheadMaxBytes | quote }}
+              value: {{ .Values.broker.readaheadMaxBytes | int | quote }}
             - name: PG_POOL_SIZE
               value: {{ .Values.broker.pgPoolSize | quote }}
             {{- range .Values.broker.extraEnv }}
