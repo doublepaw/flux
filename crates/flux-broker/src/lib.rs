@@ -28,6 +28,6 @@ pub use coordinator::{
 pub use dedup::{DedupCache, DedupCacheConfig, DedupResult, WriterState};
 pub use error::BrokerError;
 pub use fl::{FlReader, FlWriter};
-pub use object_store::{LocalFsStore, ObjectStore, S3ObjectStore};
+pub use object_store::{CloudObjectStore, LocalFsStore, ObjectStore, S3ObjectStore};
 pub use shutdown::{ConnectionTracker, TrackedConnection, shutdown_signal};
 pub use tokio_util::sync::CancellationToken;

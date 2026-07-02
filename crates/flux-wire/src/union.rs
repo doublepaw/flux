@@ -41,11 +41,14 @@ pub enum ServerMessage {
 pub fn encode_client_message(msg: &ClientMessage, buf: &mut [u8]) -> Result<usize, EncodeError> {
     let envelope = match msg {
         ClientMessage::Append(req) => proto::ClientMessage {
-            message: Some(proto::client_message::Message::Append(decode_from_encoded(
-                req,
-                writer::encode_request,
-                "append request",
-            )?)),
+            message: Some(proto::client_message::Message::Append(
+                decode_from_encoded_sized(
+                    req,
+                    writer::encode_request,
+                    "append request",
+                    buf.len(),
+                )?,
+            )),
         },
         ClientMessage::Read(req) => proto::ClientMessage {
             message: Some(proto::client_message::Message::Read(decode_from_encoded(
@@ -279,7 +282,22 @@ fn decode_from_encoded<T, M>(
 where
     M: Message + Default,
 {
-    let mut capacity = INITIAL_ENCODE_BUFFER;
+    decode_from_encoded_sized(value, encoder, msg, INITIAL_ENCODE_BUFFER)
+}
+
+/// Like `decode_from_encoded`, seeded with a caller-provided capacity hint
+/// (typically the outer encode buffer size) so appropriately-sized callers
+/// encode on the first attempt instead of panic-retrying upward from 64 KiB.
+fn decode_from_encoded_sized<T, M>(
+    value: &T,
+    encoder: fn(&T, &mut [u8]) -> usize,
+    msg: &'static str,
+    capacity_hint: usize,
+) -> Result<M, EncodeError>
+where
+    M: Message + Default,
+{
+    let mut capacity = capacity_hint.max(INITIAL_ENCODE_BUFFER);
     let mut last_panic = None;
 
     for _ in 0..MAX_ENCODE_RETRIES {

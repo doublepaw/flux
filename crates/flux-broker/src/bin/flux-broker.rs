@@ -22,10 +22,19 @@ use tracing_subscriber::EnvFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
+use flux_broker::buffer::BufferConfig;
 use flux_broker::{
-    AdminConfig, AdminState, BrokerConfig, BrokerState, Coordinator, CoordinatorConfig,
-    LocalFsStore, admin, metrics, run_with_shutdown, shutdown_signal,
+    AdminConfig, AdminState, BrokerConfig, BrokerState, CloudObjectStore, Coordinator,
+    CoordinatorConfig, LocalFsStore, ObjectStore, S3ObjectStore, admin, metrics, run_with_shutdown,
+    shutdown_signal,
 };
+
+fn env_or<T: std::str::FromStr>(name: &str, default: T) -> T {
+    env::var(name)
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(default)
+}
 
 fn init_tracing() -> Result<Option<SdkTracerProvider>> {
     let env_filter = EnvFilter::from_default_env().add_directive("flux_broker=info".parse()?);
@@ -82,31 +91,83 @@ async fn main() -> Result<()> {
         .expect("Invalid ADMIN_ADDR");
     let data_dir = env::var("DATA_DIR").unwrap_or_else(|_| "/tmp/flux".to_string());
 
+    // Object store backend: fs (default), s3, gcs, azure.
+    let backend = env::var("OBJECT_STORE").unwrap_or_else(|_| "fs".to_string());
+    let bucket = env::var("OBJECT_STORE_BUCKET").unwrap_or_else(|_| "flux".to_string());
+    let key_prefix = env::var("OBJECT_STORE_PREFIX").unwrap_or_else(|_| "data".to_string());
+
     info!("Starting flux-broker");
     info!("WebSocket server: {}", ws_addr);
     info!("Admin API: {}", admin_addr);
-    info!("Data directory: {}", data_dir);
+    info!("Object store: {} (bucket={})", backend, bucket);
 
     // Create database pool
     let pool = PgPoolOptions::new()
-        .max_connections(10)
+        .max_connections(env_or("PG_POOL_SIZE", 10u32))
         .connect(&database_url)
         .await?;
 
     info!("Connected to database");
 
-    // Create object store (local filesystem for now)
-    let store = LocalFsStore::new(&data_dir);
-    std::fs::create_dir_all(&data_dir)?;
-
-    // Create broker configuration
+    // Broker configuration (env-tunable for benchmarks and deployment)
+    let buffer = BufferConfig {
+        max_size_bytes: env_or("BUFFER_MAX_BYTES", 256 * 1024 * 1024usize),
+        max_wait: Duration::from_millis(env_or("BUFFER_MAX_WAIT_MS", 200u64)),
+        high_water_bytes: env_or("BUFFER_HIGH_WATER_BYTES", 384 * 1024 * 1024usize),
+        low_water_bytes: env_or("BUFFER_LOW_WATER_BYTES", 128 * 1024 * 1024usize),
+    };
     let broker_config = BrokerConfig {
         bind_addr: ws_addr,
-        bucket: "flux".to_string(),
-        key_prefix: "data".to_string(),
+        bucket: bucket.clone(),
+        key_prefix,
+        buffer,
+        flush_interval: Duration::from_millis(env_or("FLUSH_INTERVAL_MS", 50u64)),
         ..Default::default()
     };
 
+    match backend.as_str() {
+        "fs" => {
+            std::fs::create_dir_all(&data_dir)?;
+            info!("Data directory: {}", data_dir);
+            serve(
+                pool,
+                LocalFsStore::new(&data_dir),
+                broker_config,
+                admin_addr,
+                otel_provider,
+            )
+            .await
+        }
+        "s3" => {
+            let store = match env::var("S3_ENDPOINT") {
+                Ok(endpoint) if !endpoint.trim().is_empty() => {
+                    S3ObjectStore::new_with_endpoint(&bucket, endpoint).await
+                }
+                _ => S3ObjectStore::new(&bucket).await,
+            };
+            serve(pool, store, broker_config, admin_addr, otel_provider).await
+        }
+        "gcs" => {
+            let store = CloudObjectStore::gcs(&bucket)
+                .map_err(|e| anyhow::anyhow!("gcs store init failed: {e}"))?;
+            serve(pool, store, broker_config, admin_addr, otel_provider).await
+        }
+        "azure" => {
+            let store = CloudObjectStore::azure(&bucket)
+                .map_err(|e| anyhow::anyhow!("azure store init failed: {e}"))?;
+            serve(pool, store, broker_config, admin_addr, otel_provider).await
+        }
+        other => anyhow::bail!("unknown OBJECT_STORE backend: {other}"),
+    }
+}
+
+async fn serve<S: ObjectStore + Send + Sync + 'static>(
+    pool: sqlx::PgPool,
+    store: S,
+    broker_config: BrokerConfig,
+    admin_addr: SocketAddr,
+    otel_provider: Option<SdkTracerProvider>,
+) -> Result<()> {
     // Create broker state
     let broker_state = BrokerState::with_coordinator_config(
         pool.clone(),

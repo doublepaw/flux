@@ -340,6 +340,120 @@ impl ObjectStore for S3ObjectStore {
     }
 }
 
+/// Adapter over the `object_store` crate, used for GCS and Azure Blob.
+///
+/// AWS keeps the native `S3ObjectStore`; this adapter exists so one impl
+/// covers the remaining clouds. Credentials come from each backend's
+/// standard environment (metadata server / workload identity / env vars).
+pub struct CloudObjectStore {
+    inner: Box<dyn object_store::ObjectStore>,
+}
+
+impl CloudObjectStore {
+    /// GCS-backed store. Uses `GOOGLE_APPLICATION_CREDENTIALS`,
+    /// `GOOGLE_SERVICE_ACCOUNT*` env vars, or the GCE/GKE metadata server.
+    pub fn gcs(bucket: &str) -> Result<Self, ObjectStoreError> {
+        let store = object_store::gcp::GoogleCloudStorageBuilder::from_env()
+            .with_bucket_name(bucket)
+            .build()
+            .map_err(|e| ObjectStoreError::S3 {
+                message: format!("gcs init: {e}"),
+            })?;
+        Ok(Self {
+            inner: Box::new(store),
+        })
+    }
+
+    /// Azure Blob-backed store. Uses `AZURE_STORAGE_ACCOUNT_NAME` +
+    /// `AZURE_STORAGE_ACCOUNT_KEY` env vars or workload identity.
+    pub fn azure(container: &str) -> Result<Self, ObjectStoreError> {
+        let store = object_store::azure::MicrosoftAzureBuilder::from_env()
+            .with_container_name(container)
+            .build()
+            .map_err(|e| ObjectStoreError::S3 {
+                message: format!("azure init: {e}"),
+            })?;
+        Ok(Self {
+            inner: Box::new(store),
+        })
+    }
+
+    fn map_err(key: &str, e: object_store::Error) -> ObjectStoreError {
+        match e {
+            object_store::Error::NotFound { .. } => ObjectStoreError::NotFound {
+                key: key.to_string(),
+            },
+            other => ObjectStoreError::S3 {
+                message: other.to_string(),
+            },
+        }
+    }
+}
+
+#[async_trait]
+impl ObjectStore for CloudObjectStore {
+    async fn put(&self, key: &str, data: Bytes) -> Result<(), ObjectStoreError> {
+        let path = object_store::path::Path::from(key);
+        self.inner
+            .put(&path, data.into())
+            .await
+            .map_err(|e| Self::map_err(key, e))?;
+        Ok(())
+    }
+
+    async fn get(&self, key: &str) -> Result<Bytes, ObjectStoreError> {
+        let path = object_store::path::Path::from(key);
+        let result = self
+            .inner
+            .get(&path)
+            .await
+            .map_err(|e| Self::map_err(key, e))?;
+        result.bytes().await.map_err(|e| Self::map_err(key, e))
+    }
+
+    async fn get_range(&self, key: &str, start: u64, len: u64) -> Result<Bytes, ObjectStoreError> {
+        let path = object_store::path::Path::from(key);
+        let range = (start as usize)..((start + len) as usize);
+        self.inner
+            .get_range(&path, range)
+            .await
+            .map_err(|e| Self::map_err(key, e))
+    }
+
+    async fn delete(&self, key: &str) -> Result<(), ObjectStoreError> {
+        let path = object_store::path::Path::from(key);
+        self.inner
+            .delete(&path)
+            .await
+            .map_err(|e| Self::map_err(key, e))
+    }
+
+    async fn list(&self, prefix: &str) -> Result<Vec<String>, ObjectStoreError> {
+        use futures::TryStreamExt;
+        let path = object_store::path::Path::from(prefix);
+        let entries: Vec<_> = self
+            .inner
+            .list(Some(&path))
+            .try_collect()
+            .await
+            .map_err(|e| Self::map_err(prefix, e))?;
+        Ok(entries
+            .into_iter()
+            .map(|m| m.location.to_string())
+            .collect())
+    }
+
+    async fn size(&self, key: &str) -> Result<u64, ObjectStoreError> {
+        let path = object_store::path::Path::from(key);
+        let meta = self
+            .inner
+            .head(&path)
+            .await
+            .map_err(|e| Self::map_err(key, e))?;
+        Ok(meta.size as u64)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

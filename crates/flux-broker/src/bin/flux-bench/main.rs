@@ -10,6 +10,8 @@
 //!   flux-bench writer --writers 10 --record-size 1024 --duration 30
 //!   flux-bench report --compare baseline.json --current latest.json
 
+mod remote;
+
 use clap::{Parser, Subcommand};
 use hdrhistogram::Histogram;
 use serde::{Deserialize, Serialize};
@@ -54,6 +56,50 @@ enum Commands {
         /// Save results to file
         #[arg(long)]
         save: Option<String>,
+    },
+
+    /// Benchmark a running broker over the network (produce + fetch)
+    Remote {
+        /// Broker WebSocket URL, e.g. ws://flux-broker:9000
+        #[arg(long)]
+        url: String,
+
+        /// Postgres URL (used once, to resolve/create the topic).
+        /// Falls back to $DATABASE_URL.
+        #[arg(long)]
+        database_url: Option<String>,
+
+        /// Topic name (created if missing)
+        #[arg(long, default_value = "bench")]
+        topic: String,
+
+        /// Number of concurrent writer connections
+        #[arg(long, default_value = "40")]
+        writers: usize,
+
+        /// Append requests per writer
+        #[arg(long, default_value = "2500")]
+        requests_per_writer: u64,
+
+        /// Records per append request
+        #[arg(long, default_value = "128")]
+        records_per_batch: u32,
+
+        /// Record payload size in bytes
+        #[arg(long, default_value = "1024")]
+        record_size: usize,
+
+        /// Max in-flight appends per writer
+        #[arg(long, default_value = "64")]
+        max_in_flight: usize,
+
+        /// Parallel fetch reader connections
+        #[arg(long, default_value = "4")]
+        fetch_readers: usize,
+
+        /// Skip the fetch phase
+        #[arg(long, default_value = "false")]
+        skip_fetch: bool,
     },
 
     /// Generate comparison report
@@ -461,6 +507,38 @@ async fn main() {
                 file.write_all(json.as_bytes()).expect("Failed to write");
                 eprintln!("Results saved to {}", path);
             }
+        }
+
+        Commands::Remote {
+            url,
+            database_url,
+            topic,
+            writers,
+            requests_per_writer,
+            records_per_batch,
+            record_size,
+            max_in_flight,
+            fetch_readers,
+            skip_fetch,
+        } => {
+            let database_url = database_url
+                .or_else(|| std::env::var("DATABASE_URL").ok())
+                .expect("--database-url or DATABASE_URL required");
+            let report = remote::run(remote::RemoteConfig {
+                url,
+                database_url,
+                topic,
+                writers,
+                requests_per_writer,
+                records_per_batch,
+                record_size,
+                max_in_flight,
+                fetch_readers,
+                skip_fetch,
+            })
+            .await
+            .expect("remote benchmark failed");
+            println!("{}", serde_json::to_string_pretty(&report).unwrap());
         }
 
         Commands::Report { compare, current } => {

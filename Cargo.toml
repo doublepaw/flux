@@ -22,7 +22,7 @@ tokio-tungstenite = "0.24"
 # Storage
 aws-sdk-s3 = "1"
 aws-config = "1"
-object_store = { version = "0.11", features = ["aws"] }
+object_store = { version = "0.11", features = ["aws", "gcp", "azure"] }
 
 # Database
 sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "uuid", "chrono", "json"] }

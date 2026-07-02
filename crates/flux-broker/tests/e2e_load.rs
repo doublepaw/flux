@@ -489,15 +489,54 @@ async fn run_producer_worker(
     }
 }
 
+/// Read back all records using N parallel reader connections, each covering a
+/// disjoint contiguous offset stripe (models a consumer fleet; the wire
+/// protocol has no correlation IDs, so parallelism comes from connections,
+/// not same-socket pipelining).
 async fn fetch_all_records(url: &str, topic_id: TopicId, expected_total: u64, timeout: Duration) {
+    let readers = env_usize("FLUX_LOAD_FETCH_READERS", 4).max(1) as u64;
+    let stripe = expected_total.div_ceil(readers);
+
+    let mut handles = Vec::new();
+    for r in 0..readers {
+        let start = r * stripe;
+        let end = ((r + 1) * stripe).min(expected_total);
+        if start >= end {
+            break;
+        }
+        let url = url.to_string();
+        handles.push(tokio::spawn(async move {
+            fetch_offset_range(&url, topic_id, start, end, timeout).await
+        }));
+    }
+
+    let mut seen_total = 0u64;
+    for handle in handles {
+        seen_total += handle.await.expect("fetch reader task");
+    }
+
+    assert_eq!(
+        seen_total, expected_total,
+        "read count mismatch after load run"
+    );
+}
+
+/// Read records in [start, end) on one connection; returns records seen.
+async fn fetch_offset_range(
+    url: &str,
+    topic_id: TopicId,
+    start: u64,
+    end: u64,
+    timeout: Duration,
+) -> u64 {
     let (mut ws, _) = connect_async_with_config(url, Some(websocket_client_config()), false)
         .await
         .expect("read connect");
-    let mut current_offset = Offset(0);
+    let mut current_offset = Offset(start);
     let mut seen_total = 0u64;
 
     let deadline = Instant::now() + timeout;
-    while Instant::now() < deadline {
+    while Instant::now() < deadline && current_offset.0 < end {
         let req = reader::ReadRequest {
             topic_id,
             offset: current_offset,
@@ -527,21 +566,17 @@ async fn fetch_all_records(url: &str, topic_id: TopicId, expected_total: u64, ti
 
         let mut progressed = false;
         for result in fetch_resp.results {
-            let count = result.records.len() as u64;
+            // Count only records inside this reader's stripe; responses may
+            // extend past `end` since the server fills max_bytes.
+            let count = (result.records.len() as u64).min(end - current_offset.0);
             if count > 0 {
                 current_offset = Offset(current_offset.0 + count);
                 seen_total += count;
                 progressed = true;
             }
-
-            if current_offset.0 >= result.high_watermark.0 && seen_total >= expected_total {
-                ws.close(None).await.ok();
-                return;
+            if current_offset.0 >= end {
+                break;
             }
-        }
-
-        if seen_total >= expected_total {
-            break;
         }
 
         if !progressed {
@@ -549,11 +584,8 @@ async fn fetch_all_records(url: &str, topic_id: TopicId, expected_total: u64, ti
         }
     }
 
-    assert_eq!(
-        seen_total, expected_total,
-        "read count mismatch after load run"
-    );
     ws.close(None).await.ok();
+    seen_total
 }
 
 async fn run_load_scenario(scenario: LoadScenario, capture_otel: bool) -> LoadRunResult {
