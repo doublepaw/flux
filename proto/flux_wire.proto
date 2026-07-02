@@ -60,6 +60,33 @@ message ReadResponse {
   repeated TopicResult results = 4;
 }
 
+// Zero-copy read: the broker returns compressed FL segments as-is;
+// the client decompresses and decodes records locally.
+message RawReadRequest {
+  uint32 topic_id = 1;
+  uint64 offset = 2;
+  // Budget in *compressed* bytes.
+  uint32 max_bytes = 3;
+}
+
+message RawSegment {
+  uint32 topic_id = 1;
+  uint32 schema_id = 2;
+  uint64 start_offset = 3;
+  uint64 end_offset = 4;
+  uint32 crc32 = 5;
+  // Compressed FL segment payload (zstd).
+  bytes payload = 6;
+}
+
+message RawReadResponse {
+  bool success = 1;
+  uint32 error_code = 2;
+  string error_message = 3;
+  uint64 high_watermark = 4;
+  repeated RawSegment segments = 5;
+}
+
 message JoinGroupRequest {
   string group_id = 1;
   string reader_id = 2;
@@ -153,6 +180,7 @@ message ClientMessage {
     LeaveGroupRequest leave_group = 6;
     CommitRequest commit = 7;
     AuthRequest auth = 8;
+    RawReadRequest raw_read = 9;
   }
 }
 
@@ -166,5 +194,6 @@ message ServerMessage {
     LeaveGroupResponse leave_group = 6;
     CommitResponse commit = 7;
     AuthResponse auth = 8;
+    RawReadResponse raw_read = 9;
   }
 }

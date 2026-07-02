@@ -57,6 +57,7 @@ private static final long serialVersionUID = 0L;
     LEAVE_GROUP(6),
     COMMIT(7),
     AUTH(8),
+    RAW_READ(9),
     MESSAGE_NOT_SET(0);
     private final int value;
     private MessageCase(int value) {
@@ -82,6 +83,7 @@ private static final long serialVersionUID = 0L;
         case 6: return LEAVE_GROUP;
         case 7: return COMMIT;
         case 8: return AUTH;
+        case 9: return RAW_READ;
         case 0: return MESSAGE_NOT_SET;
         default: return null;
       }
@@ -345,6 +347,37 @@ private static final long serialVersionUID = 0L;
     return io.flux.sdk.proto.AuthResponse.getDefaultInstance();
   }
 
+  public static final int RAW_READ_FIELD_NUMBER = 9;
+  /**
+   * <code>.flux.wire.RawReadResponse raw_read = 9;</code>
+   * @return Whether the rawRead field is set.
+   */
+  @java.lang.Override
+  public boolean hasRawRead() {
+    return messageCase_ == 9;
+  }
+  /**
+   * <code>.flux.wire.RawReadResponse raw_read = 9;</code>
+   * @return The rawRead.
+   */
+  @java.lang.Override
+  public io.flux.sdk.proto.RawReadResponse getRawRead() {
+    if (messageCase_ == 9) {
+       return (io.flux.sdk.proto.RawReadResponse) message_;
+    }
+    return io.flux.sdk.proto.RawReadResponse.getDefaultInstance();
+  }
+  /**
+   * <code>.flux.wire.RawReadResponse raw_read = 9;</code>
+   */
+  @java.lang.Override
+  public io.flux.sdk.proto.RawReadResponseOrBuilder getRawReadOrBuilder() {
+    if (messageCase_ == 9) {
+       return (io.flux.sdk.proto.RawReadResponse) message_;
+    }
+    return io.flux.sdk.proto.RawReadResponse.getDefaultInstance();
+  }
+
   private byte memoizedIsInitialized = -1;
   @java.lang.Override
   public final boolean isInitialized() {
@@ -382,6 +415,9 @@ private static final long serialVersionUID = 0L;
     }
     if (messageCase_ == 8) {
       output.writeMessage(8, (io.flux.sdk.proto.AuthResponse) message_);
+    }
+    if (messageCase_ == 9) {
+      output.writeMessage(9, (io.flux.sdk.proto.RawReadResponse) message_);
     }
     getUnknownFields().writeTo(output);
   }
@@ -423,6 +459,10 @@ private static final long serialVersionUID = 0L;
     if (messageCase_ == 8) {
       size += com.google.protobuf.CodedOutputStream
         .computeMessageSize(8, (io.flux.sdk.proto.AuthResponse) message_);
+    }
+    if (messageCase_ == 9) {
+      size += com.google.protobuf.CodedOutputStream
+        .computeMessageSize(9, (io.flux.sdk.proto.RawReadResponse) message_);
     }
     size += getUnknownFields().getSerializedSize();
     memoizedSize = size;
@@ -473,6 +513,10 @@ private static final long serialVersionUID = 0L;
         if (!getAuth()
             .equals(other.getAuth())) return false;
         break;
+      case 9:
+        if (!getRawRead()
+            .equals(other.getRawRead())) return false;
+        break;
       case 0:
       default:
     }
@@ -519,6 +563,10 @@ private static final long serialVersionUID = 0L;
       case 8:
         hash = (37 * hash) + AUTH_FIELD_NUMBER;
         hash = (53 * hash) + getAuth().hashCode();
+        break;
+      case 9:
+        hash = (37 * hash) + RAW_READ_FIELD_NUMBER;
+        hash = (53 * hash) + getRawRead().hashCode();
         break;
       case 0:
       default:
@@ -678,6 +726,9 @@ private static final long serialVersionUID = 0L;
       if (authBuilder_ != null) {
         authBuilder_.clear();
       }
+      if (rawReadBuilder_ != null) {
+        rawReadBuilder_.clear();
+      }
       messageCase_ = 0;
       message_ = null;
       return this;
@@ -751,6 +802,10 @@ private static final long serialVersionUID = 0L;
           authBuilder_ != null) {
         result.message_ = authBuilder_.build();
       }
+      if (messageCase_ == 9 &&
+          rawReadBuilder_ != null) {
+        result.message_ = rawReadBuilder_.build();
+      }
     }
 
     @java.lang.Override
@@ -796,6 +851,10 @@ private static final long serialVersionUID = 0L;
         }
         case AUTH: {
           mergeAuth(other.getAuth());
+          break;
+        }
+        case RAW_READ: {
+          mergeRawRead(other.getRawRead());
           break;
         }
         case MESSAGE_NOT_SET: {
@@ -884,6 +943,13 @@ private static final long serialVersionUID = 0L;
               messageCase_ = 8;
               break;
             } // case 66
+            case 74: {
+              input.readMessage(
+                  internalGetRawReadFieldBuilder().getBuilder(),
+                  extensionRegistry);
+              messageCase_ = 9;
+              break;
+            } // case 74
             default: {
               if (!super.parseUnknownField(input, extensionRegistry, tag)) {
                 done = true; // was an endgroup tag
@@ -2050,6 +2116,148 @@ private static final long serialVersionUID = 0L;
       messageCase_ = 8;
       onChanged();
       return authBuilder_;
+    }
+
+    private com.google.protobuf.SingleFieldBuilder<
+        io.flux.sdk.proto.RawReadResponse, io.flux.sdk.proto.RawReadResponse.Builder, io.flux.sdk.proto.RawReadResponseOrBuilder> rawReadBuilder_;
+    /**
+     * <code>.flux.wire.RawReadResponse raw_read = 9;</code>
+     * @return Whether the rawRead field is set.
+     */
+    @java.lang.Override
+    public boolean hasRawRead() {
+      return messageCase_ == 9;
+    }
+    /**
+     * <code>.flux.wire.RawReadResponse raw_read = 9;</code>
+     * @return The rawRead.
+     */
+    @java.lang.Override
+    public io.flux.sdk.proto.RawReadResponse getRawRead() {
+      if (rawReadBuilder_ == null) {
+        if (messageCase_ == 9) {
+          return (io.flux.sdk.proto.RawReadResponse) message_;
+        }
+        return io.flux.sdk.proto.RawReadResponse.getDefaultInstance();
+      } else {
+        if (messageCase_ == 9) {
+          return rawReadBuilder_.getMessage();
+        }
+        return io.flux.sdk.proto.RawReadResponse.getDefaultInstance();
+      }
+    }
+    /**
+     * <code>.flux.wire.RawReadResponse raw_read = 9;</code>
+     */
+    public Builder setRawRead(io.flux.sdk.proto.RawReadResponse value) {
+      if (rawReadBuilder_ == null) {
+        if (value == null) {
+          throw new NullPointerException();
+        }
+        message_ = value;
+        onChanged();
+      } else {
+        rawReadBuilder_.setMessage(value);
+      }
+      messageCase_ = 9;
+      return this;
+    }
+    /**
+     * <code>.flux.wire.RawReadResponse raw_read = 9;</code>
+     */
+    public Builder setRawRead(
+        io.flux.sdk.proto.RawReadResponse.Builder builderForValue) {
+      if (rawReadBuilder_ == null) {
+        message_ = builderForValue.build();
+        onChanged();
+      } else {
+        rawReadBuilder_.setMessage(builderForValue.build());
+      }
+      messageCase_ = 9;
+      return this;
+    }
+    /**
+     * <code>.flux.wire.RawReadResponse raw_read = 9;</code>
+     */
+    public Builder mergeRawRead(io.flux.sdk.proto.RawReadResponse value) {
+      if (rawReadBuilder_ == null) {
+        if (messageCase_ == 9 &&
+            message_ != io.flux.sdk.proto.RawReadResponse.getDefaultInstance()) {
+          message_ = io.flux.sdk.proto.RawReadResponse.newBuilder((io.flux.sdk.proto.RawReadResponse) message_)
+              .mergeFrom(value).buildPartial();
+        } else {
+          message_ = value;
+        }
+        onChanged();
+      } else {
+        if (messageCase_ == 9) {
+          rawReadBuilder_.mergeFrom(value);
+        } else {
+          rawReadBuilder_.setMessage(value);
+        }
+      }
+      messageCase_ = 9;
+      return this;
+    }
+    /**
+     * <code>.flux.wire.RawReadResponse raw_read = 9;</code>
+     */
+    public Builder clearRawRead() {
+      if (rawReadBuilder_ == null) {
+        if (messageCase_ == 9) {
+          messageCase_ = 0;
+          message_ = null;
+          onChanged();
+        }
+      } else {
+        if (messageCase_ == 9) {
+          messageCase_ = 0;
+          message_ = null;
+        }
+        rawReadBuilder_.clear();
+      }
+      return this;
+    }
+    /**
+     * <code>.flux.wire.RawReadResponse raw_read = 9;</code>
+     */
+    public io.flux.sdk.proto.RawReadResponse.Builder getRawReadBuilder() {
+      return internalGetRawReadFieldBuilder().getBuilder();
+    }
+    /**
+     * <code>.flux.wire.RawReadResponse raw_read = 9;</code>
+     */
+    @java.lang.Override
+    public io.flux.sdk.proto.RawReadResponseOrBuilder getRawReadOrBuilder() {
+      if ((messageCase_ == 9) && (rawReadBuilder_ != null)) {
+        return rawReadBuilder_.getMessageOrBuilder();
+      } else {
+        if (messageCase_ == 9) {
+          return (io.flux.sdk.proto.RawReadResponse) message_;
+        }
+        return io.flux.sdk.proto.RawReadResponse.getDefaultInstance();
+      }
+    }
+    /**
+     * <code>.flux.wire.RawReadResponse raw_read = 9;</code>
+     */
+    private com.google.protobuf.SingleFieldBuilder<
+        io.flux.sdk.proto.RawReadResponse, io.flux.sdk.proto.RawReadResponse.Builder, io.flux.sdk.proto.RawReadResponseOrBuilder> 
+        internalGetRawReadFieldBuilder() {
+      if (rawReadBuilder_ == null) {
+        if (!(messageCase_ == 9)) {
+          message_ = io.flux.sdk.proto.RawReadResponse.getDefaultInstance();
+        }
+        rawReadBuilder_ = new com.google.protobuf.SingleFieldBuilder<
+            io.flux.sdk.proto.RawReadResponse, io.flux.sdk.proto.RawReadResponse.Builder, io.flux.sdk.proto.RawReadResponseOrBuilder>(
+                (io.flux.sdk.proto.RawReadResponse) message_,
+                getParentForChildren(),
+                isClean());
+        message_ = null;
+      }
+      messageCase_ = 9;
+      onChanged();
+      return rawReadBuilder_;
     }
 
     // @@protoc_insertion_point(builder_scope:flux.wire.ServerMessage)

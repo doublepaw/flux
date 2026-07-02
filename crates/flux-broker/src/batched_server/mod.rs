@@ -14,6 +14,7 @@ mod authz;
 mod encoding;
 mod fetch;
 mod flush;
+mod raw_read;
 mod read;
 mod read_ahead;
 mod reader_group;
@@ -153,7 +154,13 @@ pub struct BrokerState<S: ObjectStore> {
     /// Token cancelled on hard crash to stop flush loop and connection handlers.
     cancel_token: CancellationToken,
     /// Read-ahead cache for direct reads (prefetches the next window).
-    pub(crate) readahead: read_ahead::ReadAheadCache,
+    pub(crate) readahead: read_ahead::ReadAheadCache<(
+        Vec<flux_wire::reader::TopicResult>,
+        flux_common::ids::Offset,
+    )>,
+    /// Read-ahead cache for raw (zero-copy) reads.
+    pub(crate) raw_readahead:
+        read_ahead::ReadAheadCache<(Vec<flux_wire::reader::RawSegment>, flux_common::ids::Offset)>,
     /// Iceberg ingestion buffer (None = disabled).
     #[cfg(feature = "iceberg")]
     pub iceberg_buffer: Option<Arc<flux_iceberg::IcebergBuffer>>,
@@ -224,6 +231,7 @@ impl<S: ObjectStore + Send + Sync + 'static> BrokerState<S> {
             pending_flush_commands,
             cancel_token,
             readahead: read_ahead::ReadAheadCache::new(config.readahead_max_bytes),
+            raw_readahead: read_ahead::ReadAheadCache::new(config.readahead_max_bytes),
             #[cfg(feature = "iceberg")]
             iceberg_buffer,
         });
@@ -742,6 +750,26 @@ async fn handle_message<S: ObjectStore + Send + Sync + 'static>(
                 ERR_INTERNAL_ERROR,
                 "unexpected append in message handler",
             )
+        }
+        ClientMessage::RawRead(req) => {
+            // Reuse read authz: raw reads expose the same data.
+            let as_read = flux_wire::reader::ReadRequest {
+                topic_id: req.topic_id,
+                offset: req.offset,
+                max_bytes: req.max_bytes,
+            };
+            if !can_read(state, ctx.principal.as_ref(), &as_read).await {
+                return observe_and_return(
+                    "raw_read",
+                    encode_error_response(
+                        ErrorResponseKind::Read,
+                        ERR_AUTHZ_DENIED,
+                        "read not authorized",
+                    ),
+                );
+            }
+            let response = raw_read::handle_raw_read_request(req, state).await;
+            observe_and_return("raw_read", response)
         }
         ClientMessage::Read(req) => {
             if !can_read(state, ctx.principal.as_ref(), &req).await {

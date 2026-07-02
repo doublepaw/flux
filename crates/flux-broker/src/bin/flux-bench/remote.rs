@@ -20,9 +20,7 @@ use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 async fn connect_with_retry(
     url: &str,
 ) -> anyhow::Result<
-    tokio_tungstenite::WebSocketStream<
-        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
-    >,
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
 > {
     let mut delay = Duration::from_millis(500);
     for attempt in 0..10 {
@@ -51,6 +49,7 @@ fn ws_config() -> WebSocketConfig {
     config
 }
 
+use flux_broker::fl::{Codec, FlReader, SegmentMeta};
 use flux_common::ids::{AppendSeq, Offset, SchemaId, TopicId, WriterId};
 use flux_common::types::{Record, RecordBatch};
 use flux_wire::{
@@ -70,6 +69,7 @@ pub struct RemoteConfig {
     pub max_in_flight: usize,
     pub fetch_readers: usize,
     pub max_bytes: u32,
+    pub raw_reads: bool,
     pub skip_fetch: bool,
 }
 
@@ -174,8 +174,13 @@ pub async fn run(cfg: RemoteConfig) -> anyhow::Result<RemoteReport> {
             }
             let url = cfg.url.clone();
             let max_bytes = cfg.max_bytes;
+            let raw = cfg.raw_reads;
             fetch_handles.push(tokio::spawn(async move {
-                fetch_offset_range(&url, topic_id, start, end, max_bytes).await
+                if raw {
+                    fetch_offset_range_raw(&url, topic_id, start, end, max_bytes).await
+                } else {
+                    fetch_offset_range(&url, topic_id, start, end, max_bytes).await
+                }
             }));
         }
         let mut seen = 0u64;
@@ -344,6 +349,85 @@ async fn fetch_offset_range(
         let mut progressed = false;
         for result in resp.results {
             let count = (result.records.len() as u64).min(end - current);
+            if count > 0 {
+                current += count;
+                seen += count;
+                progressed = true;
+            }
+            if current >= end {
+                break;
+            }
+        }
+        if !progressed {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    }
+
+    ws.close(None).await.ok();
+    Ok(seen)
+}
+
+/// Zero-copy fetch: request compressed FL segments and decode client-side.
+async fn fetch_offset_range_raw(
+    url: &str,
+    topic_id: TopicId,
+    start: u64,
+    end: u64,
+    max_bytes: u32,
+) -> anyhow::Result<u64> {
+    let mut ws = connect_with_retry(url).await?;
+    let mut current = start;
+    let mut seen = 0u64;
+
+    while current < end {
+        let req = reader::RawReadRequest {
+            topic_id,
+            offset: Offset(current),
+            max_bytes,
+        };
+        ws.send(Message::Binary(encode_frame(
+            ClientMessage::RawRead(req),
+            64 * 1024,
+        )))
+        .await?;
+
+        let msg = tokio::time::timeout(Duration::from_secs(60), ws.next())
+            .await
+            .map_err(|_| anyhow::anyhow!("raw read timeout"))?
+            .ok_or_else(|| anyhow::anyhow!("connection closed"))??;
+        let data = match msg {
+            Message::Binary(data) => data,
+            _ => continue,
+        };
+        let resp = match decode_frame(&data) {
+            ServerMessage::RawRead(resp) => resp,
+            other => anyhow::bail!("unexpected server message: {other:?}"),
+        };
+        anyhow::ensure!(resp.success, "raw read failed: {}", resp.error_message);
+
+        let mut progressed = false;
+        for segment in resp.segments {
+            // Client-side decode: decompress + parse the FL segment.
+            let meta = SegmentMeta {
+                topic_id: segment.topic_id,
+                schema_id: segment.schema_id,
+                start_offset: segment.start_offset,
+                end_offset: segment.end_offset,
+                record_count: 0,
+                byte_offset: 0,
+                byte_length: segment.payload.len() as u64,
+                ingest_time: 0,
+                compression: Codec::Zstd,
+                crc32: segment.crc32,
+            };
+            let records = FlReader::read_segment(&segment.payload, &meta, true)
+                .map_err(|e| anyhow::anyhow!("segment decode: {e}"))?;
+
+            // The requested offset may fall mid-segment; skip the prefix,
+            // clip at this reader's stripe end.
+            let skip = current.saturating_sub(segment.start_offset.0) as usize;
+            let available = records.len().saturating_sub(skip) as u64;
+            let count = available.min(end - current);
             if count > 0 {
                 current += count;
                 seen += count;

@@ -15,10 +15,10 @@ use crate::object_store::ObjectStore;
 use super::BrokerState;
 
 /// Hard cap on index rows per fetch, independent of `max_bytes`.
-const MAX_BATCHES_PER_FETCH: i64 = 256;
+pub(crate) const MAX_BATCHES_PER_FETCH: i64 = 256;
 
 /// Concurrent object-store range reads per fetch (order-preserving).
-const SEGMENT_FETCH_CONCURRENCY: usize = 16;
+pub(crate) const SEGMENT_FETCH_CONCURRENCY: usize = 16;
 
 /// Fetch records for a topic starting at `start_offset`.
 ///

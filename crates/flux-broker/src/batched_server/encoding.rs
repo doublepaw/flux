@@ -36,6 +36,7 @@ pub(crate) fn server_message_kind(msg: &ServerMessage) -> &'static str {
         ServerMessage::LeaveGroup(_) => "leave_group",
         ServerMessage::Commit(_) => "commit",
         ServerMessage::Auth(_) => "auth",
+        ServerMessage::RawRead(_) => "raw_read",
     }
 }
 
@@ -49,6 +50,7 @@ pub(crate) fn client_message_kind(msg: &ClientMessage) -> &'static str {
         ClientMessage::LeaveGroup(_) => "leave_group",
         ClientMessage::Commit(_) => "commit",
         ClientMessage::Auth(_) => "auth",
+        ClientMessage::RawRead(_) => "raw_read",
     }
 }
 

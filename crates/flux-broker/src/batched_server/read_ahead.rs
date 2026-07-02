@@ -4,10 +4,13 @@
 //! Server-side read-ahead for direct reads.
 //!
 //! After serving a read at (topic, offset), the broker prefetches the next
-//! contiguous window (storage fetch + decompress) while the consumer is
-//! busy decoding and processing the current response. The next request hits
-//! the cache and skips the storage round-trip entirely, pipelining consumer
-//! processing with broker I/O without any wire-format change.
+//! contiguous window while the consumer is busy processing the current
+//! response. The next request hits the cache and skips the storage
+//! round-trip entirely, pipelining consumer processing with broker I/O
+//! without any wire-format change.
+//!
+//! Generic over the window payload: decoded records for classic reads,
+//! compressed segments for raw (zero-copy) reads.
 //!
 //! Entries are keyed by (topic, offset), consumed on hit (serve-once, so a
 //! stale high watermark is bounded to a single response), and the cache is
@@ -16,32 +19,26 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 
-use flux_common::ids::Offset;
-use flux_wire::reader;
-
-pub(crate) struct Prefetched {
-    pub results: Vec<reader::TopicResult>,
-    pub high_watermark: Offset,
-    pub bytes: usize,
-}
-
-pub(crate) struct ReadAheadCache {
+pub(crate) struct ReadAheadCache<T> {
     max_bytes: usize,
-    inner: Mutex<Inner>,
+    inner: Mutex<Inner<T>>,
 }
 
-#[derive(Default)]
-struct Inner {
-    entries: HashMap<(u32, u64), Prefetched>,
+struct Inner<T> {
+    entries: HashMap<(u32, u64), (T, usize)>,
     inflight: HashSet<(u32, u64)>,
     total_bytes: usize,
 }
 
-impl ReadAheadCache {
+impl<T> ReadAheadCache<T> {
     pub fn new(max_bytes: usize) -> Self {
         Self {
             max_bytes,
-            inner: Mutex::new(Inner::default()),
+            inner: Mutex::new(Inner {
+                entries: HashMap::new(),
+                inflight: HashSet::new(),
+                total_bytes: 0,
+            }),
         }
     }
 
@@ -50,16 +47,18 @@ impl ReadAheadCache {
     }
 
     /// Consume a prefetched window, if present.
-    pub fn take(&self, key: (u32, u64)) -> Option<Prefetched> {
+    pub fn take(&self, key: (u32, u64)) -> Option<T> {
         if !self.enabled() {
             return None;
         }
         let mut inner = self.inner.lock().unwrap();
         let entry = inner.entries.remove(&key);
-        if let Some(ref p) = entry {
-            inner.total_bytes -= p.bytes;
+        if let Some((value, bytes)) = entry {
+            inner.total_bytes -= bytes;
+            Some(value)
+        } else {
+            None
         }
-        entry
     }
 
     /// Reserve a prefetch slot. Returns false when disabled, already
@@ -79,16 +78,16 @@ impl ReadAheadCache {
         true
     }
 
-    /// Complete a reserved prefetch, inserting the result if it fits.
-    pub fn complete(&self, key: (u32, u64), result: Option<Prefetched>) {
+    /// Complete a reserved prefetch, inserting the (value, bytes) if it fits.
+    pub fn complete(&self, key: (u32, u64), result: Option<(T, usize)>) {
         let mut inner = self.inner.lock().unwrap();
         inner.inflight.remove(&key);
-        if let Some(p) = result
-            && p.bytes > 0
-            && inner.total_bytes + p.bytes <= self.max_bytes
+        if let Some((value, bytes)) = result
+            && bytes > 0
+            && inner.total_bytes + bytes <= self.max_bytes
         {
-            inner.total_bytes += p.bytes;
-            inner.entries.insert(key, p);
+            inner.total_bytes += bytes;
+            inner.entries.insert(key, (value, bytes));
         }
     }
 }

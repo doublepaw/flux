@@ -102,6 +102,10 @@ enum Commands {
         #[arg(long, default_value = "268435456")]
         max_bytes: u32,
 
+        /// Fetch with zero-copy raw reads (client-side segment decode)
+        #[arg(long, default_value = "false")]
+        raw_reads: bool,
+
         /// Skip the fetch phase
         #[arg(long, default_value = "false")]
         skip_fetch: bool,
@@ -525,6 +529,7 @@ async fn main() {
             max_in_flight,
             fetch_readers,
             max_bytes,
+            raw_reads,
             skip_fetch,
         } => {
             let database_url = database_url
@@ -541,6 +546,7 @@ async fn main() {
                 max_in_flight,
                 fetch_readers,
                 max_bytes,
+                raw_reads,
                 skip_fetch,
             })
             .await

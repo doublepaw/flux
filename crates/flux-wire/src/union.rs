@@ -22,6 +22,7 @@ pub enum ClientMessage {
     LeaveGroup(reader::LeaveGroupRequest),
     Commit(reader::CommitRequest),
     Auth(auth::AuthRequest),
+    RawRead(reader::RawReadRequest),
 }
 
 /// Broker-to-client message variants.
@@ -35,6 +36,7 @@ pub enum ServerMessage {
     LeaveGroup(reader::LeaveGroupResponse),
     Commit(reader::CommitResponse),
     Auth(auth::AuthResponse),
+    RawRead(reader::RawReadResponse),
 }
 
 /// Encode a client message into `buf`.
@@ -91,6 +93,11 @@ pub fn encode_client_message(msg: &ClientMessage, buf: &mut [u8]) -> Result<usiz
                 decode_from_encoded_result(req, auth::encode_auth_request, "auth request")?,
             )),
         },
+        ClientMessage::RawRead(req) => proto::ClientMessage {
+            message: Some(proto::client_message::Message::RawRead(
+                decode_from_encoded(req, reader::encode_raw_read_request, "raw read request")?,
+            )),
+        },
     };
 
     encode_proto_checked(&envelope, buf)
@@ -138,6 +145,9 @@ pub fn decode_client_message(buf: &[u8]) -> Result<(ClientMessage, usize), Decod
                 auth::decode_auth_request,
                 "auth request",
             )?),
+            proto::client_message::Message::RawRead(inner) => ClientMessage::RawRead(
+                encode_and_decode(inner, reader::decode_raw_read_request, "raw read request")?,
+            ),
         };
 
     Ok((decoded, buf.len()))
@@ -215,6 +225,16 @@ pub fn encode_server_message(msg: &ServerMessage, buf: &mut [u8]) -> Result<usiz
                 decode_from_encoded_result(resp, auth::encode_auth_response, "auth response")?,
             )),
         },
+        ServerMessage::RawRead(resp) => proto::ServerMessage {
+            message: Some(proto::server_message::Message::RawRead(
+                decode_from_encoded_result_sized(
+                    resp,
+                    reader::encode_raw_read_response_checked,
+                    "raw read response",
+                    buf.len(),
+                )?,
+            )),
+        },
     };
 
     encode_proto_checked(&envelope, buf)
@@ -260,6 +280,9 @@ pub fn decode_server_message(buf: &[u8]) -> Result<(ServerMessage, usize), Decod
             ),
             proto::server_message::Message::Commit(inner) => ServerMessage::Commit(
                 encode_and_decode(inner, reader::decode_commit_response, "commit response")?,
+            ),
+            proto::server_message::Message::RawRead(inner) => ServerMessage::RawRead(
+                encode_and_decode(inner, reader::decode_raw_read_response, "raw read response")?,
             ),
             proto::server_message::Message::Auth(inner) => ServerMessage::Auth(encode_and_decode(
                 inner,

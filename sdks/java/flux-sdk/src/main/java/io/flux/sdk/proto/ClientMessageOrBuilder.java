@@ -130,5 +130,20 @@ public interface ClientMessageOrBuilder extends
    */
   io.flux.sdk.proto.AuthRequestOrBuilder getAuthOrBuilder();
 
+  /**
+   * <code>.flux.wire.RawReadRequest raw_read = 9;</code>
+   * @return Whether the rawRead field is set.
+   */
+  boolean hasRawRead();
+  /**
+   * <code>.flux.wire.RawReadRequest raw_read = 9;</code>
+   * @return The rawRead.
+   */
+  io.flux.sdk.proto.RawReadRequest getRawRead();
+  /**
+   * <code>.flux.wire.RawReadRequest raw_read = 9;</code>
+   */
+  io.flux.sdk.proto.RawReadRequestOrBuilder getRawReadOrBuilder();
+
   io.flux.sdk.proto.ClientMessage.MessageCase getMessageCase();
 }

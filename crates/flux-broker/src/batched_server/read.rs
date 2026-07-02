@@ -35,7 +35,7 @@ pub(crate) async fn handle_read_request<S: ObjectStore + Send + Sync + 'static>(
     // covered this exact (topic, offset); otherwise read from storage.
     let cache_key = (req.topic_id.0, req.offset.0);
     let result = match state.readahead.take(cache_key) {
-        Some(prefetched) => Ok(prefetched.results),
+        Some((results, _hwm)) => Ok(results),
         None => process_read(&req, state).await,
     };
 
@@ -67,11 +67,7 @@ pub(crate) async fn handle_read_request<S: ObjectStore + Send + Sync + 'static>(
                                     rec.value.len() + rec.key.as_ref().map(|k| k.len()).unwrap_or(0)
                                 })
                                 .sum();
-                            super::read_ahead::Prefetched {
-                                results,
-                                high_watermark,
-                                bytes,
-                            }
+                            ((results, high_watermark), bytes)
                         });
                 state.readahead.complete(next_key, prefetched);
             });

@@ -67,6 +67,21 @@ public final class FluxWire extends com.google.protobuf.GeneratedFile {
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_flux_wire_ReadResponse_fieldAccessorTable;
   static final com.google.protobuf.Descriptors.Descriptor
+    internal_static_flux_wire_RawReadRequest_descriptor;
+  static final 
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
+      internal_static_flux_wire_RawReadRequest_fieldAccessorTable;
+  static final com.google.protobuf.Descriptors.Descriptor
+    internal_static_flux_wire_RawSegment_descriptor;
+  static final 
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
+      internal_static_flux_wire_RawSegment_fieldAccessorTable;
+  static final com.google.protobuf.Descriptors.Descriptor
+    internal_static_flux_wire_RawReadResponse_descriptor;
+  static final 
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
+      internal_static_flux_wire_RawReadResponse_fieldAccessorTable;
+  static final com.google.protobuf.Descriptors.Descriptor
     internal_static_flux_wire_JoinGroupRequest_descriptor;
   static final 
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
@@ -164,57 +179,68 @@ public final class FluxWire extends com.google.protobuf.GeneratedFile {
       "\022\"\n\007records\030\004 \003(\0132\021.flux.wire.Record\"s\n\014" +
       "ReadResponse\022\017\n\007success\030\001 \001(\010\022\022\n\nerror_c" +
       "ode\030\002 \001(\r\022\025\n\rerror_message\030\003 \001(\t\022\'\n\007resu" +
-      "lts\030\004 \003(\0132\026.flux.wire.TopicResult\"J\n\020Joi" +
-      "nGroupRequest\022\020\n\010group_id\030\001 \001(\t\022\021\n\treade" +
-      "r_id\030\002 \001(\t\022\021\n\ttopic_ids\030\003 \003(\r\"O\n\021JoinGro" +
-      "upResponse\022\017\n\007success\030\001 \001(\010\022\022\n\nerror_cod" +
-      "e\030\002 \001(\r\022\025\n\rerror_message\030\003 \001(\t\"I\n\020Heartb" +
-      "eatRequest\022\020\n\010group_id\030\001 \001(\t\022\020\n\010topic_id" +
-      "\030\002 \001(\r\022\021\n\treader_id\030\003 \001(\t\"{\n\021HeartbeatRe" +
-      "sponse\022\017\n\007success\030\001 \001(\010\022\022\n\nerror_code\030\002 " +
-      "\001(\r\022\025\n\rerror_message\030\003 \001(\t\022*\n\006status\030\004 \001" +
-      "(\0162\032.flux.wire.HeartbeatStatus\"W\n\013PollRe" +
-      "quest\022\020\n\010group_id\030\001 \001(\t\022\020\n\010topic_id\030\002 \001(" +
-      "\r\022\021\n\treader_id\030\003 \001(\t\022\021\n\tmax_bytes\030\004 \001(\r\"" +
-      "\270\001\n\014PollResponse\022\017\n\007success\030\001 \001(\010\022\022\n\nerr" +
-      "or_code\030\002 \001(\r\022\025\n\rerror_message\030\003 \001(\t\022\'\n\007" +
-      "results\030\004 \003(\0132\026.flux.wire.TopicResult\022\024\n" +
-      "\014start_offset\030\005 \001(\004\022\022\n\nend_offset\030\006 \001(\004\022" +
-      "\031\n\021lease_deadline_ms\030\007 \001(\004\"J\n\021LeaveGroup" +
-      "Request\022\020\n\010group_id\030\001 \001(\t\022\020\n\010topic_id\030\002 " +
-      "\001(\r\022\021\n\treader_id\030\003 \001(\t\"P\n\022LeaveGroupResp" +
-      "onse\022\017\n\007success\030\001 \001(\010\022\022\n\nerror_code\030\002 \001(" +
-      "\r\022\025\n\rerror_message\030\003 \001(\t\"p\n\rCommitReques" +
-      "t\022\020\n\010group_id\030\001 \001(\t\022\021\n\treader_id\030\002 \001(\t\022\020" +
-      "\n\010topic_id\030\003 \001(\r\022\024\n\014start_offset\030\004 \001(\004\022\022" +
-      "\n\nend_offset\030\005 \001(\004\"L\n\016CommitResponse\022\017\n\007" +
-      "success\030\001 \001(\010\022\022\n\nerror_code\030\002 \001(\r\022\025\n\rerr" +
-      "or_message\030\003 \001(\t\"\036\n\013AuthRequest\022\017\n\007api_k" +
-      "ey\030\001 \001(\t\"J\n\014AuthResponse\022\017\n\007success\030\001 \001(" +
-      "\010\022\022\n\nerror_code\030\002 \001(\r\022\025\n\rerror_message\030\003" +
-      " \001(\t\"\204\003\n\rClientMessage\022*\n\006append\030\001 \001(\0132\030" +
-      ".flux.wire.AppendRequestH\000\022&\n\004read\030\002 \001(\013" +
-      "2\026.flux.wire.ReadRequestH\000\0221\n\njoin_group" +
-      "\030\003 \001(\0132\033.flux.wire.JoinGroupRequestH\000\0220\n" +
-      "\theartbeat\030\004 \001(\0132\033.flux.wire.HeartbeatRe" +
-      "questH\000\022&\n\004poll\030\005 \001(\0132\026.flux.wire.PollRe" +
-      "questH\000\0223\n\013leave_group\030\006 \001(\0132\034.flux.wire" +
-      ".LeaveGroupRequestH\000\022*\n\006commit\030\007 \001(\0132\030.f" +
-      "lux.wire.CommitRequestH\000\022&\n\004auth\030\010 \001(\0132\026" +
-      ".flux.wire.AuthRequestH\000B\t\n\007message\"\214\003\n\r" +
-      "ServerMessage\022+\n\006append\030\001 \001(\0132\031.flux.wir" +
-      "e.AppendResponseH\000\022\'\n\004read\030\002 \001(\0132\027.flux." +
-      "wire.ReadResponseH\000\0222\n\njoin_group\030\003 \001(\0132" +
-      "\034.flux.wire.JoinGroupResponseH\000\0221\n\theart" +
-      "beat\030\004 \001(\0132\034.flux.wire.HeartbeatResponse" +
-      "H\000\022\'\n\004poll\030\005 \001(\0132\027.flux.wire.PollRespons" +
-      "eH\000\0224\n\013leave_group\030\006 \001(\0132\035.flux.wire.Lea" +
-      "veGroupResponseH\000\022+\n\006commit\030\007 \001(\0132\031.flux" +
-      ".wire.CommitResponseH\000\022\'\n\004auth\030\010 \001(\0132\027.f" +
-      "lux.wire.AuthResponseH\000B\t\n\007message*O\n\017He" +
-      "artbeatStatus\022\027\n\023HEARTBEAT_STATUS_OK\020\000\022#" +
-      "\n\037HEARTBEAT_STATUS_UNKNOWN_MEMBER\020\001B\025\n\021i" +
-      "o.flux.sdk.protoP\001b\006proto3"
+      "lts\030\004 \003(\0132\026.flux.wire.TopicResult\"E\n\016Raw" +
+      "ReadRequest\022\020\n\010topic_id\030\001 \001(\r\022\016\n\006offset\030" +
+      "\002 \001(\004\022\021\n\tmax_bytes\030\003 \001(\r\"{\n\nRawSegment\022\020" +
+      "\n\010topic_id\030\001 \001(\r\022\021\n\tschema_id\030\002 \001(\r\022\024\n\014s" +
+      "tart_offset\030\003 \001(\004\022\022\n\nend_offset\030\004 \001(\004\022\r\n" +
+      "\005crc32\030\005 \001(\r\022\017\n\007payload\030\006 \001(\014\"\216\001\n\017RawRea" +
+      "dResponse\022\017\n\007success\030\001 \001(\010\022\022\n\nerror_code" +
+      "\030\002 \001(\r\022\025\n\rerror_message\030\003 \001(\t\022\026\n\016high_wa" +
+      "termark\030\004 \001(\004\022\'\n\010segments\030\005 \003(\0132\025.flux.w" +
+      "ire.RawSegment\"J\n\020JoinGroupRequest\022\020\n\010gr" +
+      "oup_id\030\001 \001(\t\022\021\n\treader_id\030\002 \001(\t\022\021\n\ttopic" +
+      "_ids\030\003 \003(\r\"O\n\021JoinGroupResponse\022\017\n\007succe" +
+      "ss\030\001 \001(\010\022\022\n\nerror_code\030\002 \001(\r\022\025\n\rerror_me" +
+      "ssage\030\003 \001(\t\"I\n\020HeartbeatRequest\022\020\n\010group" +
+      "_id\030\001 \001(\t\022\020\n\010topic_id\030\002 \001(\r\022\021\n\treader_id" +
+      "\030\003 \001(\t\"{\n\021HeartbeatResponse\022\017\n\007success\030\001" +
+      " \001(\010\022\022\n\nerror_code\030\002 \001(\r\022\025\n\rerror_messag" +
+      "e\030\003 \001(\t\022*\n\006status\030\004 \001(\0162\032.flux.wire.Hear" +
+      "tbeatStatus\"W\n\013PollRequest\022\020\n\010group_id\030\001" +
+      " \001(\t\022\020\n\010topic_id\030\002 \001(\r\022\021\n\treader_id\030\003 \001(" +
+      "\t\022\021\n\tmax_bytes\030\004 \001(\r\"\270\001\n\014PollResponse\022\017\n" +
+      "\007success\030\001 \001(\010\022\022\n\nerror_code\030\002 \001(\r\022\025\n\rer" +
+      "ror_message\030\003 \001(\t\022\'\n\007results\030\004 \003(\0132\026.flu" +
+      "x.wire.TopicResult\022\024\n\014start_offset\030\005 \001(\004" +
+      "\022\022\n\nend_offset\030\006 \001(\004\022\031\n\021lease_deadline_m" +
+      "s\030\007 \001(\004\"J\n\021LeaveGroupRequest\022\020\n\010group_id" +
+      "\030\001 \001(\t\022\020\n\010topic_id\030\002 \001(\r\022\021\n\treader_id\030\003 " +
+      "\001(\t\"P\n\022LeaveGroupResponse\022\017\n\007success\030\001 \001" +
+      "(\010\022\022\n\nerror_code\030\002 \001(\r\022\025\n\rerror_message\030" +
+      "\003 \001(\t\"p\n\rCommitRequest\022\020\n\010group_id\030\001 \001(\t" +
+      "\022\021\n\treader_id\030\002 \001(\t\022\020\n\010topic_id\030\003 \001(\r\022\024\n" +
+      "\014start_offset\030\004 \001(\004\022\022\n\nend_offset\030\005 \001(\004\"" +
+      "L\n\016CommitResponse\022\017\n\007success\030\001 \001(\010\022\022\n\ner" +
+      "ror_code\030\002 \001(\r\022\025\n\rerror_message\030\003 \001(\t\"\036\n" +
+      "\013AuthRequest\022\017\n\007api_key\030\001 \001(\t\"J\n\014AuthRes" +
+      "ponse\022\017\n\007success\030\001 \001(\010\022\022\n\nerror_code\030\002 \001" +
+      "(\r\022\025\n\rerror_message\030\003 \001(\t\"\263\003\n\rClientMess" +
+      "age\022*\n\006append\030\001 \001(\0132\030.flux.wire.AppendRe" +
+      "questH\000\022&\n\004read\030\002 \001(\0132\026.flux.wire.ReadRe" +
+      "questH\000\0221\n\njoin_group\030\003 \001(\0132\033.flux.wire." +
+      "JoinGroupRequestH\000\0220\n\theartbeat\030\004 \001(\0132\033." +
+      "flux.wire.HeartbeatRequestH\000\022&\n\004poll\030\005 \001" +
+      "(\0132\026.flux.wire.PollRequestH\000\0223\n\013leave_gr" +
+      "oup\030\006 \001(\0132\034.flux.wire.LeaveGroupRequestH" +
+      "\000\022*\n\006commit\030\007 \001(\0132\030.flux.wire.CommitRequ" +
+      "estH\000\022&\n\004auth\030\010 \001(\0132\026.flux.wire.AuthRequ" +
+      "estH\000\022-\n\010raw_read\030\t \001(\0132\031.flux.wire.RawR" +
+      "eadRequestH\000B\t\n\007message\"\274\003\n\rServerMessag" +
+      "e\022+\n\006append\030\001 \001(\0132\031.flux.wire.AppendResp" +
+      "onseH\000\022\'\n\004read\030\002 \001(\0132\027.flux.wire.ReadRes" +
+      "ponseH\000\0222\n\njoin_group\030\003 \001(\0132\034.flux.wire." +
+      "JoinGroupResponseH\000\0221\n\theartbeat\030\004 \001(\0132\034" +
+      ".flux.wire.HeartbeatResponseH\000\022\'\n\004poll\030\005" +
+      " \001(\0132\027.flux.wire.PollResponseH\000\0224\n\013leave" +
+      "_group\030\006 \001(\0132\035.flux.wire.LeaveGroupRespo" +
+      "nseH\000\022+\n\006commit\030\007 \001(\0132\031.flux.wire.Commit" +
+      "ResponseH\000\022\'\n\004auth\030\010 \001(\0132\027.flux.wire.Aut" +
+      "hResponseH\000\022.\n\010raw_read\030\t \001(\0132\032.flux.wir" +
+      "e.RawReadResponseH\000B\t\n\007message*O\n\017Heartb" +
+      "eatStatus\022\027\n\023HEARTBEAT_STATUS_OK\020\000\022#\n\037HE" +
+      "ARTBEAT_STATUS_UNKNOWN_MEMBER\020\001B\025\n\021io.fl" +
+      "ux.sdk.protoP\001b\006proto3"
     };
     descriptor = com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
@@ -268,90 +294,108 @@ public final class FluxWire extends com.google.protobuf.GeneratedFile {
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_flux_wire_ReadResponse_descriptor,
         new java.lang.String[] { "Success", "ErrorCode", "ErrorMessage", "Results", });
-    internal_static_flux_wire_JoinGroupRequest_descriptor =
+    internal_static_flux_wire_RawReadRequest_descriptor =
       getDescriptor().getMessageType(8);
+    internal_static_flux_wire_RawReadRequest_fieldAccessorTable = new
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
+        internal_static_flux_wire_RawReadRequest_descriptor,
+        new java.lang.String[] { "TopicId", "Offset", "MaxBytes", });
+    internal_static_flux_wire_RawSegment_descriptor =
+      getDescriptor().getMessageType(9);
+    internal_static_flux_wire_RawSegment_fieldAccessorTable = new
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
+        internal_static_flux_wire_RawSegment_descriptor,
+        new java.lang.String[] { "TopicId", "SchemaId", "StartOffset", "EndOffset", "Crc32", "Payload", });
+    internal_static_flux_wire_RawReadResponse_descriptor =
+      getDescriptor().getMessageType(10);
+    internal_static_flux_wire_RawReadResponse_fieldAccessorTable = new
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
+        internal_static_flux_wire_RawReadResponse_descriptor,
+        new java.lang.String[] { "Success", "ErrorCode", "ErrorMessage", "HighWatermark", "Segments", });
+    internal_static_flux_wire_JoinGroupRequest_descriptor =
+      getDescriptor().getMessageType(11);
     internal_static_flux_wire_JoinGroupRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_flux_wire_JoinGroupRequest_descriptor,
         new java.lang.String[] { "GroupId", "ReaderId", "TopicIds", });
     internal_static_flux_wire_JoinGroupResponse_descriptor =
-      getDescriptor().getMessageType(9);
+      getDescriptor().getMessageType(12);
     internal_static_flux_wire_JoinGroupResponse_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_flux_wire_JoinGroupResponse_descriptor,
         new java.lang.String[] { "Success", "ErrorCode", "ErrorMessage", });
     internal_static_flux_wire_HeartbeatRequest_descriptor =
-      getDescriptor().getMessageType(10);
+      getDescriptor().getMessageType(13);
     internal_static_flux_wire_HeartbeatRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_flux_wire_HeartbeatRequest_descriptor,
         new java.lang.String[] { "GroupId", "TopicId", "ReaderId", });
     internal_static_flux_wire_HeartbeatResponse_descriptor =
-      getDescriptor().getMessageType(11);
+      getDescriptor().getMessageType(14);
     internal_static_flux_wire_HeartbeatResponse_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_flux_wire_HeartbeatResponse_descriptor,
         new java.lang.String[] { "Success", "ErrorCode", "ErrorMessage", "Status", });
     internal_static_flux_wire_PollRequest_descriptor =
-      getDescriptor().getMessageType(12);
+      getDescriptor().getMessageType(15);
     internal_static_flux_wire_PollRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_flux_wire_PollRequest_descriptor,
         new java.lang.String[] { "GroupId", "TopicId", "ReaderId", "MaxBytes", });
     internal_static_flux_wire_PollResponse_descriptor =
-      getDescriptor().getMessageType(13);
+      getDescriptor().getMessageType(16);
     internal_static_flux_wire_PollResponse_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_flux_wire_PollResponse_descriptor,
         new java.lang.String[] { "Success", "ErrorCode", "ErrorMessage", "Results", "StartOffset", "EndOffset", "LeaseDeadlineMs", });
     internal_static_flux_wire_LeaveGroupRequest_descriptor =
-      getDescriptor().getMessageType(14);
+      getDescriptor().getMessageType(17);
     internal_static_flux_wire_LeaveGroupRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_flux_wire_LeaveGroupRequest_descriptor,
         new java.lang.String[] { "GroupId", "TopicId", "ReaderId", });
     internal_static_flux_wire_LeaveGroupResponse_descriptor =
-      getDescriptor().getMessageType(15);
+      getDescriptor().getMessageType(18);
     internal_static_flux_wire_LeaveGroupResponse_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_flux_wire_LeaveGroupResponse_descriptor,
         new java.lang.String[] { "Success", "ErrorCode", "ErrorMessage", });
     internal_static_flux_wire_CommitRequest_descriptor =
-      getDescriptor().getMessageType(16);
+      getDescriptor().getMessageType(19);
     internal_static_flux_wire_CommitRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_flux_wire_CommitRequest_descriptor,
         new java.lang.String[] { "GroupId", "ReaderId", "TopicId", "StartOffset", "EndOffset", });
     internal_static_flux_wire_CommitResponse_descriptor =
-      getDescriptor().getMessageType(17);
+      getDescriptor().getMessageType(20);
     internal_static_flux_wire_CommitResponse_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_flux_wire_CommitResponse_descriptor,
         new java.lang.String[] { "Success", "ErrorCode", "ErrorMessage", });
     internal_static_flux_wire_AuthRequest_descriptor =
-      getDescriptor().getMessageType(18);
+      getDescriptor().getMessageType(21);
     internal_static_flux_wire_AuthRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_flux_wire_AuthRequest_descriptor,
         new java.lang.String[] { "ApiKey", });
     internal_static_flux_wire_AuthResponse_descriptor =
-      getDescriptor().getMessageType(19);
+      getDescriptor().getMessageType(22);
     internal_static_flux_wire_AuthResponse_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_flux_wire_AuthResponse_descriptor,
         new java.lang.String[] { "Success", "ErrorCode", "ErrorMessage", });
     internal_static_flux_wire_ClientMessage_descriptor =
-      getDescriptor().getMessageType(20);
+      getDescriptor().getMessageType(23);
     internal_static_flux_wire_ClientMessage_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_flux_wire_ClientMessage_descriptor,
-        new java.lang.String[] { "Append", "Read", "JoinGroup", "Heartbeat", "Poll", "LeaveGroup", "Commit", "Auth", "Message", });
+        new java.lang.String[] { "Append", "Read", "JoinGroup", "Heartbeat", "Poll", "LeaveGroup", "Commit", "Auth", "RawRead", "Message", });
     internal_static_flux_wire_ServerMessage_descriptor =
-      getDescriptor().getMessageType(21);
+      getDescriptor().getMessageType(24);
     internal_static_flux_wire_ServerMessage_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_flux_wire_ServerMessage_descriptor,
-        new java.lang.String[] { "Append", "Read", "JoinGroup", "Heartbeat", "Poll", "LeaveGroup", "Commit", "Auth", "Message", });
+        new java.lang.String[] { "Append", "Read", "JoinGroup", "Heartbeat", "Poll", "LeaveGroup", "Commit", "Auth", "RawRead", "Message", });
     descriptor.resolveAllFeaturesImmutable();
   }
 

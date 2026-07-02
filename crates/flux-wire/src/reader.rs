@@ -561,3 +561,108 @@ mod tests {
         assert_eq!(decoded.end_offset.0, 200);
     }
 }
+
+// ---------------------------------------------------------------------------
+// Raw (zero-copy) reads: compressed FL segments shipped as-is; the client
+// decompresses and decodes records locally.
+// ---------------------------------------------------------------------------
+
+/// Zero-copy read request. `max_bytes` budgets *compressed* bytes.
+#[derive(Debug, Clone)]
+pub struct RawReadRequest {
+    pub topic_id: TopicId,
+    pub offset: Offset,
+    pub max_bytes: u32,
+}
+
+/// One compressed FL segment plus the metadata needed to decode it.
+#[derive(Debug, Clone)]
+pub struct RawSegment {
+    pub topic_id: TopicId,
+    pub schema_id: SchemaId,
+    pub start_offset: Offset,
+    pub end_offset: Offset,
+    pub crc32: u32,
+    pub payload: bytes::Bytes,
+}
+
+/// Zero-copy read response.
+#[derive(Debug, Clone)]
+pub struct RawReadResponse {
+    pub success: bool,
+    pub error_code: u16,
+    pub error_message: String,
+    pub high_watermark: Offset,
+    pub segments: Vec<RawSegment>,
+}
+
+pub fn encode_raw_read_request(req: &RawReadRequest, buf: &mut [u8]) -> usize {
+    let msg = proto::RawReadRequest {
+        topic_id: req.topic_id.0,
+        offset: req.offset.0,
+        max_bytes: req.max_bytes,
+    };
+    encode_proto(&msg, buf)
+}
+
+pub fn decode_raw_read_request(buf: &[u8]) -> Result<(RawReadRequest, usize), DecodeError> {
+    let msg = decode_proto::<proto::RawReadRequest>(buf, "invalid protobuf raw read request")?;
+    Ok((
+        RawReadRequest {
+            topic_id: TopicId(msg.topic_id),
+            offset: Offset(msg.offset),
+            max_bytes: msg.max_bytes,
+        },
+        buf.len(),
+    ))
+}
+
+pub fn encode_raw_read_response_checked(
+    resp: &RawReadResponse,
+    buf: &mut [u8],
+) -> Result<usize, EncodeError> {
+    let msg = proto::RawReadResponse {
+        success: resp.success,
+        error_code: resp.error_code as u32,
+        error_message: resp.error_message.clone(),
+        high_watermark: resp.high_watermark.0,
+        segments: resp
+            .segments
+            .iter()
+            .map(|s| proto::RawSegment {
+                topic_id: s.topic_id.0,
+                schema_id: s.schema_id.0,
+                start_offset: s.start_offset.0,
+                end_offset: s.end_offset.0,
+                crc32: s.crc32,
+                payload: s.payload.to_vec(),
+            })
+            .collect(),
+    };
+    encode_proto_checked(&msg, buf)
+}
+
+pub fn decode_raw_read_response(buf: &[u8]) -> Result<(RawReadResponse, usize), DecodeError> {
+    let msg = decode_proto::<proto::RawReadResponse>(buf, "invalid protobuf raw read response")?;
+    Ok((
+        RawReadResponse {
+            success: msg.success,
+            error_code: msg.error_code as u16,
+            error_message: msg.error_message,
+            high_watermark: Offset(msg.high_watermark),
+            segments: msg
+                .segments
+                .into_iter()
+                .map(|s| RawSegment {
+                    topic_id: TopicId(s.topic_id),
+                    schema_id: SchemaId(s.schema_id),
+                    start_offset: Offset(s.start_offset),
+                    end_offset: Offset(s.end_offset),
+                    crc32: s.crc32,
+                    payload: bytes::Bytes::from(s.payload),
+                })
+                .collect(),
+        },
+        buf.len(),
+    ))
+}
