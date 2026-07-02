@@ -57,6 +57,7 @@ async fn start_server(
         auth_timeout: Duration::from_secs(10),
         #[cfg(feature = "iceberg")]
         iceberg: None,
+        readahead_max_bytes: 0,
     };
 
     // Short session timeout for testing

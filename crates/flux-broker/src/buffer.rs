@@ -72,6 +72,11 @@ pub struct BufferConfig {
     pub high_water_bytes: usize,
     /// Low water mark for resuming after backpressure.
     pub low_water_bytes: usize,
+    /// Maximum record bytes per FL segment. Merged per-topic batches larger
+    /// than this are split into multiple segments (still one flush object),
+    /// so a single read of `max_bytes == segment_max_bytes` returns exactly
+    /// one whole segment with no read amplification.
+    pub segment_max_bytes: usize,
 }
 
 impl Default for BufferConfig {
@@ -79,8 +84,9 @@ impl Default for BufferConfig {
         Self {
             max_size_bytes: 256 * 1024 * 1024, // 256 MB
             max_wait: Duration::from_millis(200),
-            high_water_bytes: 384 * 1024 * 1024, // 384 MB
-            low_water_bytes: 128 * 1024 * 1024,  // 128 MB
+            high_water_bytes: 384 * 1024 * 1024,  // 384 MB
+            low_water_bytes: 128 * 1024 * 1024,   // 128 MB
+            segment_max_bytes: 256 * 1024 * 1024, // one read = one segment
         }
     }
 }
@@ -93,7 +99,9 @@ pub struct DrainResult {
     /// Pending writers to notify after commit.
     pub pending_writers: Vec<PendingWriter>,
     /// Mapping from batch key to index in batches vec.
-    pub key_to_index: HashMap<BatchKey, usize>,
+    /// Maps each key to the inclusive range of chunk indices in `batches`
+    /// (a merged batch may be split into multiple contiguous chunks).
+    pub key_to_index: HashMap<BatchKey, (usize, usize)>,
 }
 
 /// Broker buffer for batching append requests.
@@ -239,19 +247,40 @@ impl BrokerBuffer {
     }
 
     /// Drain the buffer, returning merged batches and pending writers.
+    ///
+    /// Each key's records are split into chunks of at most
+    /// `segment_max_bytes`, pushed contiguously so a key's chunks receive
+    /// contiguous offsets at commit time (ack math relies on this).
     pub fn drain(&mut self) -> DrainResult {
         let mut batches = Vec::with_capacity(self.batches.len());
         let mut key_to_index = HashMap::with_capacity(self.batches.len());
+        let cap = self.config.segment_max_bytes.max(1);
 
         for (key, buffered) in self.batches.drain() {
-            let index = batches.len();
-            key_to_index.insert(key, index);
+            let first = batches.len();
+            let mut records = buffered.records;
 
-            batches.push(RecordBatch {
-                topic_id: key.topic_id,
-                schema_id: key.schema_id,
-                records: buffered.records,
-            });
+            while !records.is_empty() {
+                let mut chunk_bytes = 0usize;
+                let mut split_at = records.len();
+                for (i, record) in records.iter().enumerate() {
+                    chunk_bytes +=
+                        record.value.len() + record.key.as_ref().map(|k| k.len()).unwrap_or(0);
+                    if chunk_bytes > cap && i > 0 {
+                        split_at = i;
+                        break;
+                    }
+                }
+                let rest = records.split_off(split_at);
+                batches.push(RecordBatch {
+                    topic_id: key.topic_id,
+                    schema_id: key.schema_id,
+                    records,
+                });
+                records = rest;
+            }
+
+            key_to_index.insert(key, (first, batches.len() - 1));
         }
 
         let pending_writers = std::mem::take(&mut self.pending_writers);
@@ -285,7 +314,7 @@ impl BrokerBuffer {
     /// Calculate append_acks for a single pending writer.
     pub fn calculate_acks_for_pending(
         pending: &PendingWriter,
-        key_to_index: &HashMap<BatchKey, usize>,
+        key_to_index: &HashMap<BatchKey, (usize, usize)>,
         segment_offsets: &[(u64, u64)],
     ) -> Vec<BatchAck> {
         let mut append_acks = Vec::with_capacity(pending.segment_keys.len());
@@ -295,10 +324,13 @@ impl BrokerBuffer {
             let record_count = pending.record_counts[i];
             let start_idx = pending.start_indices[i];
 
-            if let Some(&seg_idx) = key_to_index.get(key) {
-                let (seg_start, seg_end) = segment_offsets[seg_idx];
+            if let Some(&(first_idx, last_idx)) = key_to_index.get(key) {
+                // A key's chunks hold contiguous offsets, so positions within
+                // the pre-split merged batch resolve against the first chunk's
+                // start offset.
+                let (seg_start, _) = segment_offsets[first_idx];
+                let (_, seg_end) = segment_offsets[last_idx];
 
-                // Calculate actual offset based on where records were inserted
                 let writer_start = seg_start + start_idx as u64;
                 let writer_end = writer_start + record_count as u64;
 
@@ -526,6 +558,7 @@ mod tests {
             max_wait: Duration::from_secs(60),
             high_water_bytes: 200,
             low_water_bytes: 100,
+            ..Default::default()
         };
         let mut buffer = BrokerBuffer::with_config(config);
 

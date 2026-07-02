@@ -15,6 +15,7 @@ mod encoding;
 mod fetch;
 mod flush;
 mod read;
+mod read_ahead;
 mod reader_group;
 
 use std::collections::HashMap;
@@ -91,6 +92,8 @@ pub struct BrokerConfig {
     pub require_auth: bool,
     /// Auth timeout for connection handshake.
     pub auth_timeout: Duration,
+    /// Byte cap for the direct-read read-ahead cache (0 = disabled).
+    pub readahead_max_bytes: usize,
     /// Iceberg ingestion config (None = disabled).
     #[cfg(feature = "iceberg")]
     pub iceberg: Option<flux_iceberg::IcebergConfig>,
@@ -106,6 +109,7 @@ impl Default for BrokerConfig {
             flush_interval: Duration::from_millis(100),
             require_auth: false,
             auth_timeout: Duration::from_secs(10),
+            readahead_max_bytes: 0,
             #[cfg(feature = "iceberg")]
             iceberg: None,
         }
@@ -148,6 +152,8 @@ pub struct BrokerState<S: ObjectStore> {
     pending_flush_commands: Arc<AtomicUsize>,
     /// Token cancelled on hard crash to stop flush loop and connection handlers.
     cancel_token: CancellationToken,
+    /// Read-ahead cache for direct reads (prefetches the next window).
+    pub(crate) readahead: read_ahead::ReadAheadCache,
     /// Iceberg ingestion buffer (None = disabled).
     #[cfg(feature = "iceberg")]
     pub iceberg_buffer: Option<Arc<flux_iceberg::IcebergBuffer>>,
@@ -217,6 +223,7 @@ impl<S: ObjectStore + Send + Sync + 'static> BrokerState<S> {
             in_flight_append,
             pending_flush_commands,
             cancel_token,
+            readahead: read_ahead::ReadAheadCache::new(config.readahead_max_bytes),
             #[cfg(feature = "iceberg")]
             iceberg_buffer,
         });
@@ -630,7 +637,7 @@ where
 /// Handle a binary message (non-append path).
 async fn handle_message<S: ObjectStore + Send + Sync + 'static>(
     data: &[u8],
-    state: &BrokerState<S>,
+    state: &Arc<BrokerState<S>>,
     ctx: &ConnectionContext,
 ) -> Vec<u8> {
     let handle_started = Instant::now();

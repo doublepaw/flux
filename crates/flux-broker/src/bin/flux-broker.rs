@@ -115,6 +115,7 @@ async fn main() -> Result<()> {
         max_wait: Duration::from_millis(env_or("BUFFER_MAX_WAIT_MS", 200u64)),
         high_water_bytes: env_or("BUFFER_HIGH_WATER_BYTES", 384 * 1024 * 1024usize),
         low_water_bytes: env_or("BUFFER_LOW_WATER_BYTES", 128 * 1024 * 1024usize),
+        segment_max_bytes: env_or("SEGMENT_MAX_BYTES", 256 * 1024 * 1024usize),
     };
     let broker_config = BrokerConfig {
         bind_addr: ws_addr,
@@ -122,6 +123,7 @@ async fn main() -> Result<()> {
         key_prefix,
         buffer,
         flush_interval: Duration::from_millis(env_or("FLUSH_INTERVAL_MS", 50u64)),
+        readahead_max_bytes: env_or("READAHEAD_MAX_BYTES", 0usize),
         ..Default::default()
     };
 

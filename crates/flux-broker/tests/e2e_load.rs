@@ -335,7 +335,8 @@ async fn start_server(
         auth_timeout: Duration::from_secs(10),
         #[cfg(feature = "iceberg")]
         iceberg: None,
-    };
+            readahead_max_bytes: 0,
+        };
 
     let state = BrokerState::new(pool, store, config).await;
     let handle = tokio::spawn(async move {

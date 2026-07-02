@@ -19,8 +19,8 @@ use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 
 fn ws_config() -> WebSocketConfig {
     let mut config = WebSocketConfig::default();
-    config.max_message_size = Some(256 * 1024 * 1024);
-    config.max_frame_size = Some(256 * 1024 * 1024);
+    config.max_message_size = Some(1024 * 1024 * 1024);
+    config.max_frame_size = Some(1024 * 1024 * 1024);
     config
 }
 
@@ -42,6 +42,7 @@ pub struct RemoteConfig {
     pub record_size: usize,
     pub max_in_flight: usize,
     pub fetch_readers: usize,
+    pub max_bytes: u32,
     pub skip_fetch: bool,
 }
 
@@ -145,8 +146,9 @@ pub async fn run(cfg: RemoteConfig) -> anyhow::Result<RemoteReport> {
                 break;
             }
             let url = cfg.url.clone();
+            let max_bytes = cfg.max_bytes;
             fetch_handles.push(tokio::spawn(async move {
-                fetch_offset_range(&url, topic_id, start, end).await
+                fetch_offset_range(&url, topic_id, start, end, max_bytes).await
             }));
         }
         let mut seen = 0u64;
@@ -280,6 +282,7 @@ async fn fetch_offset_range(
     topic_id: TopicId,
     start: u64,
     end: u64,
+    max_bytes: u32,
 ) -> anyhow::Result<u64> {
     let (mut ws, _) = connect_async_with_config(url, Some(ws_config()), false).await?;
     let mut current = start;
@@ -289,7 +292,7 @@ async fn fetch_offset_range(
         let req = reader::ReadRequest {
             topic_id,
             offset: Offset(current),
-            max_bytes: 16 * 1024 * 1024,
+            max_bytes,
         };
         ws.send(Message::Binary(encode_frame(
             ClientMessage::Read(req),

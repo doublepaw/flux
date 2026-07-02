@@ -97,6 +97,11 @@ enum Commands {
         #[arg(long, default_value = "4")]
         fetch_readers: usize,
 
+        /// Max bytes per read request (should equal the broker's
+        /// SEGMENT_MAX_BYTES so one read returns one whole segment)
+        #[arg(long, default_value = "268435456")]
+        max_bytes: u32,
+
         /// Skip the fetch phase
         #[arg(long, default_value = "false")]
         skip_fetch: bool,
@@ -519,6 +524,7 @@ async fn main() {
             record_size,
             max_in_flight,
             fetch_readers,
+            max_bytes,
             skip_fetch,
         } => {
             let database_url = database_url
@@ -534,6 +540,7 @@ async fn main() {
                 record_size,
                 max_in_flight,
                 fetch_readers,
+                max_bytes,
                 skip_fetch,
             })
             .await

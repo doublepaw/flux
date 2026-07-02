@@ -89,6 +89,7 @@ async fn test_buffer_merge_multiple_producers() {
         max_wait: Duration::from_secs(60),
         high_water_bytes: 20 * 1024 * 1024,
         low_water_bytes: 5 * 1024 * 1024,
+        ..Default::default()
     };
 
     let mut buffer = BrokerBuffer::with_config(config);
@@ -310,6 +311,7 @@ async fn test_e2e_buffer_to_s3() {
         max_wait: Duration::from_secs(60),
         high_water_bytes: 20 * 1024 * 1024,
         low_water_bytes: 5 * 1024 * 1024,
+        ..Default::default()
     };
 
     let mut buffer = BrokerBuffer::with_config(config);

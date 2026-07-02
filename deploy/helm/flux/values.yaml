@@ -11,6 +11,10 @@ broker:
   keyPrefix: bench
   flushIntervalMs: 50
   pgPoolSize: 50
+  # One read = one segment: keep equal to bench.maxBytes
+  segmentMaxBytes: 268435456
+  # Read-ahead cache (prefetch next segment per reader); 0 disables
+  readaheadMaxBytes: 4294967296
   resources:
     requests:
       cpu: "8"
@@ -56,6 +60,8 @@ bench:
   recordSize: 1024
   maxInFlight: 64
   fetchReaders: 8
+  # Keep equal to broker.segmentMaxBytes
+  maxBytes: 268435456
   skipFetch: false
   resources:
     requests:

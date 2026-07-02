@@ -514,6 +514,7 @@ impl CrashableWsBroker {
             auth_timeout: Duration::from_secs(10),
             #[cfg(feature = "iceberg")]
             iceberg: None,
+            readahead_max_bytes: 0,
         };
         let coordinator_config = self.coordinator_config.clone().unwrap_or_default();
         let state = BrokerState::with_coordinator_config(
@@ -570,6 +571,7 @@ impl CrashableWsBroker {
             auth_timeout: Duration::from_secs(10),
             #[cfg(feature = "iceberg")]
             iceberg: None,
+            readahead_max_bytes: 0,
         };
         let coordinator_config = self.coordinator_config.clone().unwrap_or_default();
         let state = BrokerState::with_coordinator_config(

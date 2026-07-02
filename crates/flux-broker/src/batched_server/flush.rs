@@ -318,7 +318,7 @@ async fn execute_flush<S: ObjectStore + Send + Sync>(
 async fn commit_batch(
     batches: &[RecordBatch],
     segment_metas: &[crate::fl::SegmentMeta],
-    key_to_index: &std::collections::HashMap<BatchKey, usize>,
+    key_to_index: &std::collections::HashMap<BatchKey, (usize, usize)>,
     pending_writers: &[crate::buffer::PendingWriter],
     s3_key: &str,
     pool: &PgPool,
@@ -334,12 +334,17 @@ async fn commit_batch(
 
     let mut segment_offsets = vec![(0u64, 0u64); batches.len()];
     let mut batch_ids = vec![0i64; batches.len()];
-    let mut segment_inputs: Vec<SegmentCommitInput> = key_to_index
+    // One commit input per chunk (a key may span multiple chunks).
+    let mut segment_inputs: Vec<SegmentCommitInput> = batches
         .iter()
-        .map(|(key, &seg_idx)| SegmentCommitInput {
-            key: *key,
+        .enumerate()
+        .map(|(seg_idx, batch)| SegmentCommitInput {
+            key: BatchKey {
+                topic_id: batch.topic_id,
+                schema_id: batch.schema_id,
+            },
             seg_idx,
-            record_count: batches[seg_idx].records.len() as i64,
+            record_count: batch.records.len() as i64,
         })
         .collect();
     segment_inputs.sort_by_key(|s| s.seg_idx);

@@ -3,6 +3,8 @@
 
 //! Read request handling.
 
+use std::sync::Arc;
+
 use tracing::error;
 
 use flux_common::ids::Offset;
@@ -22,14 +24,59 @@ use super::fetch::fetch_records;
     skip(state),
     fields(topic_id = req.topic_id.0, offset = req.offset.0, max_bytes = req.max_bytes)
 )]
-pub(crate) async fn handle_read_request<S: ObjectStore + Send + Sync>(
+pub(crate) async fn handle_read_request<S: ObjectStore + Send + Sync + 'static>(
     req: reader::ReadRequest,
-    state: &BrokerState<S>,
+    state: &Arc<BrokerState<S>>,
 ) -> Vec<u8> {
     let _timer = LatencyTimer::new(&READ_LATENCY_SECONDS);
     READ_REQUESTS_TOTAL.inc();
 
-    let result = process_read(&req, state).await;
+    // Serve from the read-ahead cache when the previous response's prefetch
+    // covered this exact (topic, offset); otherwise read from storage.
+    let cache_key = (req.topic_id.0, req.offset.0);
+    let result = match state.readahead.take(cache_key) {
+        Some(prefetched) => Ok(prefetched.results),
+        None => process_read(&req, state).await,
+    };
+
+    // Prefetch the next contiguous window while the consumer processes this
+    // response.
+    if let Ok(results) = &result {
+        let served: u64 = results.iter().map(|r| r.records.len() as u64).sum();
+        let high_watermark = results
+            .iter()
+            .map(|r| r.high_watermark.0)
+            .max()
+            .unwrap_or(0);
+        let next_offset = req.offset.0 + served;
+        let next_key = (req.topic_id.0, next_offset);
+        if served > 0 && next_offset < high_watermark && state.readahead.try_begin(next_key) {
+            let state = state.clone();
+            let topic_id = req.topic_id;
+            let max_bytes = req.max_bytes as usize;
+            tokio::spawn(async move {
+                let prefetched =
+                    fetch_records(topic_id, Offset(next_offset), None, max_bytes, &state)
+                        .await
+                        .ok()
+                        .map(|(results, high_watermark)| {
+                            let bytes = results
+                                .iter()
+                                .flat_map(|r| &r.records)
+                                .map(|rec| {
+                                    rec.value.len() + rec.key.as_ref().map(|k| k.len()).unwrap_or(0)
+                                })
+                                .sum();
+                            super::read_ahead::Prefetched {
+                                results,
+                                high_watermark,
+                                bytes,
+                            }
+                        });
+                state.readahead.complete(next_key, prefetched);
+            });
+        }
+    }
 
     let response = match result {
         Ok(results) => reader::ReadResponse {
@@ -63,7 +110,7 @@ pub(crate) async fn handle_read_request<S: ObjectStore + Send + Sync>(
 /// Process a read request for a single topic.
 async fn process_read<S: ObjectStore + Send + Sync>(
     req: &reader::ReadRequest,
-    state: &BrokerState<S>,
+    state: &Arc<BrokerState<S>>,
 ) -> Result<Vec<reader::TopicResult>, BrokerError> {
     let (results, _high_watermark) = fetch_records(
         req.topic_id,

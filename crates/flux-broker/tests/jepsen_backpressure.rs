@@ -69,6 +69,7 @@ async fn test_backpressure_returns_err_backpressure_code() {
         max_wait: Duration::from_millis(200),
         high_water_bytes: 512,
         low_water_bytes: 256,
+        ..Default::default()
     };
 
     let broker = CrashableWsBroker::start_with_buffer_config(db.pool.clone(), buffer_config).await;
@@ -110,6 +111,7 @@ async fn test_backpressure_clears_after_flush_drains() {
         max_wait: Duration::from_millis(200),
         high_water_bytes: 512,
         low_water_bytes: 256,
+        ..Default::default()
     };
 
     let broker = CrashableWsBroker::start_with_buffer_config(db.pool.clone(), buffer_config).await;

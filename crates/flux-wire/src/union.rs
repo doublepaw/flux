@@ -157,10 +157,11 @@ pub fn encode_server_message(msg: &ServerMessage, buf: &mut [u8]) -> Result<usiz
         },
         ServerMessage::Read(resp) => proto::ServerMessage {
             message: Some(proto::server_message::Message::Read(
-                decode_from_encoded_result(
+                decode_from_encoded_result_sized(
                     resp,
                     reader::encode_read_response_checked,
                     "read response",
+                    buf.len(),
                 )?,
             )),
         },
@@ -334,7 +335,21 @@ fn decode_from_encoded_result<T, M>(
 where
     M: Message + Default,
 {
-    let mut capacity = INITIAL_ENCODE_BUFFER;
+    decode_from_encoded_result_sized(value, encoder, msg, INITIAL_ENCODE_BUFFER)
+}
+
+/// Result-based twin of `decode_from_encoded_sized`: seeds the encode buffer
+/// from a caller capacity hint so large responses encode on the first try.
+fn decode_from_encoded_result_sized<T, M>(
+    value: &T,
+    encoder: fn(&T, &mut [u8]) -> Result<usize, EncodeError>,
+    msg: &'static str,
+    capacity_hint: usize,
+) -> Result<M, EncodeError>
+where
+    M: Message + Default,
+{
+    let mut capacity = capacity_hint.max(INITIAL_ENCODE_BUFFER);
 
     loop {
         let mut buf = vec![0u8; capacity];
