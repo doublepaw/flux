@@ -179,3 +179,5 @@ az group delete -n $RG --yes --no-wait
 | GCP | — | — | — | — | pending |
 | Azure | AKS 2×D16s_v5, Blob (account key), bench+broker on separate nodes | 1,045 | 210 | 299 / 501 | 12.8M rec ×1KB; produce 12.0s, fetch 59.4s |
 | Azure v2 | same + segment cap 256MB, 256MB reads, read-ahead 4GB | 1,026 | **713** | 297 / 535 | fetch 3.4×: 59.4s → 17.5s |
+| Azure v3 | same + zero-copy raw reads (client-side decode, CRC-verified) | 1,013 | **4,322** | 305 / 540 | fetch 17.5s → 2.9s; wire moves compressed bytes (bench payload ~40× compressible — real workloads compress 2-5×, expect proportionally less) |
+| local v3 | local FS, raw reads | 1,304 | **3,790** | 262 / 317 | fetch faster than produce |
