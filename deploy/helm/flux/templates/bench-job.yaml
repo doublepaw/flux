@@ -29,6 +29,9 @@ spec:
             - --max-in-flight={{ .Values.bench.maxInFlight }}
             - --fetch-readers={{ .Values.bench.fetchReaders }}
             - --max-bytes={{ .Values.bench.maxBytes | int }}
+            {{- if .Values.bench.rawReads }}
+            - --raw-reads
+            {{- end }}
             {{- if .Values.bench.skipFetch }}
             - --skip-fetch
             {{- end }}

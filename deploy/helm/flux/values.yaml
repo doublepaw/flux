@@ -62,6 +62,8 @@ bench:
   fetchReaders: 8
   # Keep equal to broker.segmentMaxBytes
   maxBytes: 268435456
+  # Zero-copy fetch: client-side segment decode
+  rawReads: false
   skipFetch: false
   resources:
     requests:
