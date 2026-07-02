@@ -17,6 +17,33 @@ use tokio_tungstenite::connect_async_with_config;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 
+async fn connect_with_retry(
+    url: &str,
+) -> anyhow::Result<
+    tokio_tungstenite::WebSocketStream<
+        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+    >,
+> {
+    let mut delay = Duration::from_millis(500);
+    for attempt in 0..10 {
+        match tokio::time::timeout(
+            Duration::from_secs(10),
+            connect_async_with_config(url, Some(ws_config()), false),
+        )
+        .await
+        {
+            Ok(Ok((ws, _))) => return Ok(ws),
+            Ok(Err(e)) if attempt == 9 => return Err(e.into()),
+            Err(_) if attempt == 9 => anyhow::bail!("connect timed out after retries"),
+            _ => {
+                tokio::time::sleep(delay).await;
+                delay = (delay * 2).min(Duration::from_secs(5));
+            }
+        }
+    }
+    unreachable!()
+}
+
 fn ws_config() -> WebSocketConfig {
     let mut config = WebSocketConfig::default();
     config.max_message_size = Some(1024 * 1024 * 1024);
@@ -186,7 +213,7 @@ async fn run_writer(
     cfg: RemoteConfig,
     topic_id: TopicId,
 ) -> anyhow::Result<Histogram<u64>> {
-    let (mut ws, _) = connect_async_with_config(&cfg.url, Some(ws_config()), false).await?;
+    let mut ws = connect_with_retry(&cfg.url).await?;
     let writer_id = WriterId::new();
 
     let payload = bytes::Bytes::from(vec![0xB5u8 ^ (index as u8); cfg.record_size]);
@@ -284,7 +311,7 @@ async fn fetch_offset_range(
     end: u64,
     max_bytes: u32,
 ) -> anyhow::Result<u64> {
-    let (mut ws, _) = connect_async_with_config(url, Some(ws_config()), false).await?;
+    let mut ws = connect_with_retry(url).await?;
     let mut current = start;
     let mut seen = 0u64;
 
