@@ -173,6 +173,6 @@ az group delete -n $RG --yes --no-wait
 | Cloud | Setup | Produce MiB/s | Fetch MiB/s | Produce p50/p99 ms | Notes |
 |---|---|---|---|---|---|
 | local | 1 broker proc, local FS, shared 32-core box | 858 | 422 | 386 / 431 | baseline after read-path fix |
-| AWS | — | — | — | — | pending |
+| AWS | EKS 2×c6i.4xlarge, S3 (IRSA, bucket-scoped policy) | 775 | 192 | 414 / 520 | 12.8M rec ×1KB; produce 16.1s, fetch 65.0s |
 | GCP | — | — | — | — | pending |
 | Azure | AKS 2×D16s_v5, Blob (account key), bench+broker on separate nodes | 1,045 | 210 | 299 / 501 | 12.8M rec ×1KB; produce 12.0s, fetch 59.4s |
