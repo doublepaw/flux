@@ -25,7 +25,7 @@ Benchmark shape (matches the local 13 GB run): 40 writers × 2,500 requests ×
 ## AWS (EKS + S3)
 
 ```sh
-export AWS_REGION=us-west-2 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+export AWS_REGION=us-east-1 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
 export CLUSTER=flux-bench BUCKET=flux-bench-$ACCOUNT
 
 # 1. S3 bucket + ECR repo
@@ -39,7 +39,7 @@ skopeo copy docker://us-docker.pkg.dev/zippy-zipline/flux/flux:latest \
 
 # 3. EKS cluster (2 × c6i.8xlarge: 32 vCPU each — one broker node, one bench node)
 eksctl create cluster --name $CLUSTER --region $AWS_REGION \
-  --nodes 2 --node-type c6i.8xlarge --managed
+  --nodes 2 --node-type c6i.4xlarge --managed  # 2x16 vCPU fits default quotas
 
 # 4. IRSA: pod identity for S3 access
 eksctl utils associate-iam-oidc-provider --cluster $CLUSTER --region $AWS_REGION --approve
@@ -140,8 +140,9 @@ az acr create -n $ACR_NAME -g $RG --sku Basic
 # 2. Build image remotely with ACR Tasks
 az acr build -r $ACR_NAME -f deploy/docker/Dockerfile -t flux:latest .
 
-# 3. AKS cluster (2 × Standard_D32s_v5)
-az aks create -n $CLUSTER -g $RG --node-count 2 --node-vm-size Standard_D32s_v5 \
+# 3. AKS cluster. D32s_v5 needs 64 vCPUs of regional quota; this subscription
+# had 38 left in westus2, so 2 × D16s_v5 (fits default quotas).
+az aks create -n $CLUSTER -g $RG --node-count 2 --node-vm-size Standard_D16s_v5 \
   --attach-acr $ACR_NAME --generate-ssh-keys
 az aks get-credentials -n $CLUSTER -g $RG
 
@@ -174,4 +175,4 @@ az group delete -n $RG --yes --no-wait
 | local | 1 broker proc, local FS, shared 32-core box | 858 | 422 | 386 / 431 | baseline after read-path fix |
 | AWS | — | — | — | — | pending |
 | GCP | — | — | — | — | pending |
-| Azure | — | — | — | — | pending |
+| Azure | AKS 2×D16s_v5, Blob (account key), bench+broker on separate nodes | 1,045 | 210 | 299 / 501 | 12.8M rec ×1KB; produce 12.0s, fetch 59.4s |
