@@ -1010,6 +1010,7 @@ async fn test_cross_broker_reader_group_reconnect() {
         topic_id,
         reader_id: "reader-a".to_string(),
         max_bytes: 1024 * 1024,
+        raw: false,
     };
     let buf = ws_helpers::encode_client_frame(ClientMessage::Poll(poll_req), 8192);
     ws_a.send(Message::Binary(buf)).await.unwrap();

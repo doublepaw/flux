@@ -30,6 +30,7 @@ private static final long serialVersionUID = 0L;
   private PollResponse() {
     errorMessage_ = "";
     results_ = java.util.Collections.emptyList();
+    rawSegments_ = java.util.Collections.emptyList();
   }
 
   public static final com.google.protobuf.Descriptors.Descriptor
@@ -180,6 +181,67 @@ private static final long serialVersionUID = 0L;
     return leaseDeadlineMs_;
   }
 
+  public static final int RAW_SEGMENTS_FIELD_NUMBER = 8;
+  @SuppressWarnings("serial")
+  private java.util.List<io.flux.sdk.proto.RawSegment> rawSegments_;
+  /**
+   * <pre>
+   * Populated instead of `results` when the poll requested raw mode.
+   * </pre>
+   *
+   * <code>repeated .flux.wire.RawSegment raw_segments = 8;</code>
+   */
+  @java.lang.Override
+  public java.util.List<io.flux.sdk.proto.RawSegment> getRawSegmentsList() {
+    return rawSegments_;
+  }
+  /**
+   * <pre>
+   * Populated instead of `results` when the poll requested raw mode.
+   * </pre>
+   *
+   * <code>repeated .flux.wire.RawSegment raw_segments = 8;</code>
+   */
+  @java.lang.Override
+  public java.util.List<? extends io.flux.sdk.proto.RawSegmentOrBuilder> 
+      getRawSegmentsOrBuilderList() {
+    return rawSegments_;
+  }
+  /**
+   * <pre>
+   * Populated instead of `results` when the poll requested raw mode.
+   * </pre>
+   *
+   * <code>repeated .flux.wire.RawSegment raw_segments = 8;</code>
+   */
+  @java.lang.Override
+  public int getRawSegmentsCount() {
+    return rawSegments_.size();
+  }
+  /**
+   * <pre>
+   * Populated instead of `results` when the poll requested raw mode.
+   * </pre>
+   *
+   * <code>repeated .flux.wire.RawSegment raw_segments = 8;</code>
+   */
+  @java.lang.Override
+  public io.flux.sdk.proto.RawSegment getRawSegments(int index) {
+    return rawSegments_.get(index);
+  }
+  /**
+   * <pre>
+   * Populated instead of `results` when the poll requested raw mode.
+   * </pre>
+   *
+   * <code>repeated .flux.wire.RawSegment raw_segments = 8;</code>
+   */
+  @java.lang.Override
+  public io.flux.sdk.proto.RawSegmentOrBuilder getRawSegmentsOrBuilder(
+      int index) {
+    return rawSegments_.get(index);
+  }
+
   private byte memoizedIsInitialized = -1;
   @java.lang.Override
   public final boolean isInitialized() {
@@ -214,6 +276,9 @@ private static final long serialVersionUID = 0L;
     }
     if (leaseDeadlineMs_ != 0L) {
       output.writeUInt64(7, leaseDeadlineMs_);
+    }
+    for (int i = 0; i < rawSegments_.size(); i++) {
+      output.writeMessage(8, rawSegments_.get(i));
     }
     getUnknownFields().writeTo(output);
   }
@@ -251,6 +316,10 @@ private static final long serialVersionUID = 0L;
       size += com.google.protobuf.CodedOutputStream
         .computeUInt64Size(7, leaseDeadlineMs_);
     }
+    for (int i = 0; i < rawSegments_.size(); i++) {
+      size += com.google.protobuf.CodedOutputStream
+        .computeMessageSize(8, rawSegments_.get(i));
+    }
     size += getUnknownFields().getSerializedSize();
     memoizedSize = size;
     return size;
@@ -280,6 +349,8 @@ private static final long serialVersionUID = 0L;
         != other.getEndOffset()) return false;
     if (getLeaseDeadlineMs()
         != other.getLeaseDeadlineMs()) return false;
+    if (!getRawSegmentsList()
+        .equals(other.getRawSegmentsList())) return false;
     if (!getUnknownFields().equals(other.getUnknownFields())) return false;
     return true;
   }
@@ -311,6 +382,10 @@ private static final long serialVersionUID = 0L;
     hash = (37 * hash) + LEASE_DEADLINE_MS_FIELD_NUMBER;
     hash = (53 * hash) + com.google.protobuf.Internal.hashLong(
         getLeaseDeadlineMs());
+    if (getRawSegmentsCount() > 0) {
+      hash = (37 * hash) + RAW_SEGMENTS_FIELD_NUMBER;
+      hash = (53 * hash) + getRawSegmentsList().hashCode();
+    }
     hash = (29 * hash) + getUnknownFields().hashCode();
     memoizedHashCode = hash;
     return hash;
@@ -455,6 +530,13 @@ private static final long serialVersionUID = 0L;
       startOffset_ = 0L;
       endOffset_ = 0L;
       leaseDeadlineMs_ = 0L;
+      if (rawSegmentsBuilder_ == null) {
+        rawSegments_ = java.util.Collections.emptyList();
+      } else {
+        rawSegments_ = null;
+        rawSegmentsBuilder_.clear();
+      }
+      bitField0_ = (bitField0_ & ~0x00000080);
       return this;
     }
 
@@ -496,6 +578,15 @@ private static final long serialVersionUID = 0L;
         result.results_ = results_;
       } else {
         result.results_ = resultsBuilder_.build();
+      }
+      if (rawSegmentsBuilder_ == null) {
+        if (((bitField0_ & 0x00000080) != 0)) {
+          rawSegments_ = java.util.Collections.unmodifiableList(rawSegments_);
+          bitField0_ = (bitField0_ & ~0x00000080);
+        }
+        result.rawSegments_ = rawSegments_;
+      } else {
+        result.rawSegments_ = rawSegmentsBuilder_.build();
       }
     }
 
@@ -579,6 +670,32 @@ private static final long serialVersionUID = 0L;
       if (other.getLeaseDeadlineMs() != 0L) {
         setLeaseDeadlineMs(other.getLeaseDeadlineMs());
       }
+      if (rawSegmentsBuilder_ == null) {
+        if (!other.rawSegments_.isEmpty()) {
+          if (rawSegments_.isEmpty()) {
+            rawSegments_ = other.rawSegments_;
+            bitField0_ = (bitField0_ & ~0x00000080);
+          } else {
+            ensureRawSegmentsIsMutable();
+            rawSegments_.addAll(other.rawSegments_);
+          }
+          onChanged();
+        }
+      } else {
+        if (!other.rawSegments_.isEmpty()) {
+          if (rawSegmentsBuilder_.isEmpty()) {
+            rawSegmentsBuilder_.dispose();
+            rawSegmentsBuilder_ = null;
+            rawSegments_ = other.rawSegments_;
+            bitField0_ = (bitField0_ & ~0x00000080);
+            rawSegmentsBuilder_ = 
+              com.google.protobuf.GeneratedMessage.alwaysUseFieldBuilders ?
+                 internalGetRawSegmentsFieldBuilder() : null;
+          } else {
+            rawSegmentsBuilder_.addAllMessages(other.rawSegments_);
+          }
+        }
+      }
       this.mergeUnknownFields(other.getUnknownFields());
       onChanged();
       return this;
@@ -648,6 +765,19 @@ private static final long serialVersionUID = 0L;
               bitField0_ |= 0x00000040;
               break;
             } // case 56
+            case 66: {
+              io.flux.sdk.proto.RawSegment m =
+                  input.readMessage(
+                      io.flux.sdk.proto.RawSegment.parser(),
+                      extensionRegistry);
+              if (rawSegmentsBuilder_ == null) {
+                ensureRawSegmentsIsMutable();
+                rawSegments_.add(m);
+              } else {
+                rawSegmentsBuilder_.addMessage(m);
+              }
+              break;
+            } // case 66
             default: {
               if (!super.parseUnknownField(input, extensionRegistry, tag)) {
                 done = true; // was an endgroup tag
@@ -1135,6 +1265,318 @@ private static final long serialVersionUID = 0L;
       leaseDeadlineMs_ = 0L;
       onChanged();
       return this;
+    }
+
+    private java.util.List<io.flux.sdk.proto.RawSegment> rawSegments_ =
+      java.util.Collections.emptyList();
+    private void ensureRawSegmentsIsMutable() {
+      if (!((bitField0_ & 0x00000080) != 0)) {
+        rawSegments_ = new java.util.ArrayList<io.flux.sdk.proto.RawSegment>(rawSegments_);
+        bitField0_ |= 0x00000080;
+       }
+    }
+
+    private com.google.protobuf.RepeatedFieldBuilder<
+        io.flux.sdk.proto.RawSegment, io.flux.sdk.proto.RawSegment.Builder, io.flux.sdk.proto.RawSegmentOrBuilder> rawSegmentsBuilder_;
+
+    /**
+     * <pre>
+     * Populated instead of `results` when the poll requested raw mode.
+     * </pre>
+     *
+     * <code>repeated .flux.wire.RawSegment raw_segments = 8;</code>
+     */
+    public java.util.List<io.flux.sdk.proto.RawSegment> getRawSegmentsList() {
+      if (rawSegmentsBuilder_ == null) {
+        return java.util.Collections.unmodifiableList(rawSegments_);
+      } else {
+        return rawSegmentsBuilder_.getMessageList();
+      }
+    }
+    /**
+     * <pre>
+     * Populated instead of `results` when the poll requested raw mode.
+     * </pre>
+     *
+     * <code>repeated .flux.wire.RawSegment raw_segments = 8;</code>
+     */
+    public int getRawSegmentsCount() {
+      if (rawSegmentsBuilder_ == null) {
+        return rawSegments_.size();
+      } else {
+        return rawSegmentsBuilder_.getCount();
+      }
+    }
+    /**
+     * <pre>
+     * Populated instead of `results` when the poll requested raw mode.
+     * </pre>
+     *
+     * <code>repeated .flux.wire.RawSegment raw_segments = 8;</code>
+     */
+    public io.flux.sdk.proto.RawSegment getRawSegments(int index) {
+      if (rawSegmentsBuilder_ == null) {
+        return rawSegments_.get(index);
+      } else {
+        return rawSegmentsBuilder_.getMessage(index);
+      }
+    }
+    /**
+     * <pre>
+     * Populated instead of `results` when the poll requested raw mode.
+     * </pre>
+     *
+     * <code>repeated .flux.wire.RawSegment raw_segments = 8;</code>
+     */
+    public Builder setRawSegments(
+        int index, io.flux.sdk.proto.RawSegment value) {
+      if (rawSegmentsBuilder_ == null) {
+        if (value == null) {
+          throw new NullPointerException();
+        }
+        ensureRawSegmentsIsMutable();
+        rawSegments_.set(index, value);
+        onChanged();
+      } else {
+        rawSegmentsBuilder_.setMessage(index, value);
+      }
+      return this;
+    }
+    /**
+     * <pre>
+     * Populated instead of `results` when the poll requested raw mode.
+     * </pre>
+     *
+     * <code>repeated .flux.wire.RawSegment raw_segments = 8;</code>
+     */
+    public Builder setRawSegments(
+        int index, io.flux.sdk.proto.RawSegment.Builder builderForValue) {
+      if (rawSegmentsBuilder_ == null) {
+        ensureRawSegmentsIsMutable();
+        rawSegments_.set(index, builderForValue.build());
+        onChanged();
+      } else {
+        rawSegmentsBuilder_.setMessage(index, builderForValue.build());
+      }
+      return this;
+    }
+    /**
+     * <pre>
+     * Populated instead of `results` when the poll requested raw mode.
+     * </pre>
+     *
+     * <code>repeated .flux.wire.RawSegment raw_segments = 8;</code>
+     */
+    public Builder addRawSegments(io.flux.sdk.proto.RawSegment value) {
+      if (rawSegmentsBuilder_ == null) {
+        if (value == null) {
+          throw new NullPointerException();
+        }
+        ensureRawSegmentsIsMutable();
+        rawSegments_.add(value);
+        onChanged();
+      } else {
+        rawSegmentsBuilder_.addMessage(value);
+      }
+      return this;
+    }
+    /**
+     * <pre>
+     * Populated instead of `results` when the poll requested raw mode.
+     * </pre>
+     *
+     * <code>repeated .flux.wire.RawSegment raw_segments = 8;</code>
+     */
+    public Builder addRawSegments(
+        int index, io.flux.sdk.proto.RawSegment value) {
+      if (rawSegmentsBuilder_ == null) {
+        if (value == null) {
+          throw new NullPointerException();
+        }
+        ensureRawSegmentsIsMutable();
+        rawSegments_.add(index, value);
+        onChanged();
+      } else {
+        rawSegmentsBuilder_.addMessage(index, value);
+      }
+      return this;
+    }
+    /**
+     * <pre>
+     * Populated instead of `results` when the poll requested raw mode.
+     * </pre>
+     *
+     * <code>repeated .flux.wire.RawSegment raw_segments = 8;</code>
+     */
+    public Builder addRawSegments(
+        io.flux.sdk.proto.RawSegment.Builder builderForValue) {
+      if (rawSegmentsBuilder_ == null) {
+        ensureRawSegmentsIsMutable();
+        rawSegments_.add(builderForValue.build());
+        onChanged();
+      } else {
+        rawSegmentsBuilder_.addMessage(builderForValue.build());
+      }
+      return this;
+    }
+    /**
+     * <pre>
+     * Populated instead of `results` when the poll requested raw mode.
+     * </pre>
+     *
+     * <code>repeated .flux.wire.RawSegment raw_segments = 8;</code>
+     */
+    public Builder addRawSegments(
+        int index, io.flux.sdk.proto.RawSegment.Builder builderForValue) {
+      if (rawSegmentsBuilder_ == null) {
+        ensureRawSegmentsIsMutable();
+        rawSegments_.add(index, builderForValue.build());
+        onChanged();
+      } else {
+        rawSegmentsBuilder_.addMessage(index, builderForValue.build());
+      }
+      return this;
+    }
+    /**
+     * <pre>
+     * Populated instead of `results` when the poll requested raw mode.
+     * </pre>
+     *
+     * <code>repeated .flux.wire.RawSegment raw_segments = 8;</code>
+     */
+    public Builder addAllRawSegments(
+        java.lang.Iterable<? extends io.flux.sdk.proto.RawSegment> values) {
+      if (rawSegmentsBuilder_ == null) {
+        ensureRawSegmentsIsMutable();
+        com.google.protobuf.AbstractMessageLite.Builder.addAll(
+            values, rawSegments_);
+        onChanged();
+      } else {
+        rawSegmentsBuilder_.addAllMessages(values);
+      }
+      return this;
+    }
+    /**
+     * <pre>
+     * Populated instead of `results` when the poll requested raw mode.
+     * </pre>
+     *
+     * <code>repeated .flux.wire.RawSegment raw_segments = 8;</code>
+     */
+    public Builder clearRawSegments() {
+      if (rawSegmentsBuilder_ == null) {
+        rawSegments_ = java.util.Collections.emptyList();
+        bitField0_ = (bitField0_ & ~0x00000080);
+        onChanged();
+      } else {
+        rawSegmentsBuilder_.clear();
+      }
+      return this;
+    }
+    /**
+     * <pre>
+     * Populated instead of `results` when the poll requested raw mode.
+     * </pre>
+     *
+     * <code>repeated .flux.wire.RawSegment raw_segments = 8;</code>
+     */
+    public Builder removeRawSegments(int index) {
+      if (rawSegmentsBuilder_ == null) {
+        ensureRawSegmentsIsMutable();
+        rawSegments_.remove(index);
+        onChanged();
+      } else {
+        rawSegmentsBuilder_.remove(index);
+      }
+      return this;
+    }
+    /**
+     * <pre>
+     * Populated instead of `results` when the poll requested raw mode.
+     * </pre>
+     *
+     * <code>repeated .flux.wire.RawSegment raw_segments = 8;</code>
+     */
+    public io.flux.sdk.proto.RawSegment.Builder getRawSegmentsBuilder(
+        int index) {
+      return internalGetRawSegmentsFieldBuilder().getBuilder(index);
+    }
+    /**
+     * <pre>
+     * Populated instead of `results` when the poll requested raw mode.
+     * </pre>
+     *
+     * <code>repeated .flux.wire.RawSegment raw_segments = 8;</code>
+     */
+    public io.flux.sdk.proto.RawSegmentOrBuilder getRawSegmentsOrBuilder(
+        int index) {
+      if (rawSegmentsBuilder_ == null) {
+        return rawSegments_.get(index);  } else {
+        return rawSegmentsBuilder_.getMessageOrBuilder(index);
+      }
+    }
+    /**
+     * <pre>
+     * Populated instead of `results` when the poll requested raw mode.
+     * </pre>
+     *
+     * <code>repeated .flux.wire.RawSegment raw_segments = 8;</code>
+     */
+    public java.util.List<? extends io.flux.sdk.proto.RawSegmentOrBuilder> 
+         getRawSegmentsOrBuilderList() {
+      if (rawSegmentsBuilder_ != null) {
+        return rawSegmentsBuilder_.getMessageOrBuilderList();
+      } else {
+        return java.util.Collections.unmodifiableList(rawSegments_);
+      }
+    }
+    /**
+     * <pre>
+     * Populated instead of `results` when the poll requested raw mode.
+     * </pre>
+     *
+     * <code>repeated .flux.wire.RawSegment raw_segments = 8;</code>
+     */
+    public io.flux.sdk.proto.RawSegment.Builder addRawSegmentsBuilder() {
+      return internalGetRawSegmentsFieldBuilder().addBuilder(
+          io.flux.sdk.proto.RawSegment.getDefaultInstance());
+    }
+    /**
+     * <pre>
+     * Populated instead of `results` when the poll requested raw mode.
+     * </pre>
+     *
+     * <code>repeated .flux.wire.RawSegment raw_segments = 8;</code>
+     */
+    public io.flux.sdk.proto.RawSegment.Builder addRawSegmentsBuilder(
+        int index) {
+      return internalGetRawSegmentsFieldBuilder().addBuilder(
+          index, io.flux.sdk.proto.RawSegment.getDefaultInstance());
+    }
+    /**
+     * <pre>
+     * Populated instead of `results` when the poll requested raw mode.
+     * </pre>
+     *
+     * <code>repeated .flux.wire.RawSegment raw_segments = 8;</code>
+     */
+    public java.util.List<io.flux.sdk.proto.RawSegment.Builder> 
+         getRawSegmentsBuilderList() {
+      return internalGetRawSegmentsFieldBuilder().getBuilderList();
+    }
+    private com.google.protobuf.RepeatedFieldBuilder<
+        io.flux.sdk.proto.RawSegment, io.flux.sdk.proto.RawSegment.Builder, io.flux.sdk.proto.RawSegmentOrBuilder> 
+        internalGetRawSegmentsFieldBuilder() {
+      if (rawSegmentsBuilder_ == null) {
+        rawSegmentsBuilder_ = new com.google.protobuf.RepeatedFieldBuilder<
+            io.flux.sdk.proto.RawSegment, io.flux.sdk.proto.RawSegment.Builder, io.flux.sdk.proto.RawSegmentOrBuilder>(
+                rawSegments_,
+                ((bitField0_ & 0x00000080) != 0),
+                getParentForChildren(),
+                isClean());
+        rawSegments_ = null;
+      }
+      return rawSegmentsBuilder_;
     }
 
     // @@protoc_insertion_point(builder_scope:flux.wire.PollResponse)

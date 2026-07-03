@@ -151,6 +151,7 @@ pub(crate) fn encode_error_response(
                 start_offset: flux_common::ids::Offset(0),
                 end_offset: flux_common::ids::Offset(0),
                 lease_deadline_ms: 0,
+                raw_segments: vec![],
             };
             encode_server_message_vec(ServerMessage::Poll(error_resp), small_capacity)
         }

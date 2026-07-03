@@ -166,6 +166,7 @@ async fn ws_poll(
         topic_id,
         reader_id: reader_id.to_string(),
         max_bytes: 1024 * 1024,
+        raw: false,
     };
     let buf = encode_client_frame(ClientMessage::Poll(req), 1024);
     ws.send(Message::Binary(buf))

@@ -377,6 +377,7 @@ async fn ws_poll(
         topic_id,
         reader_id: reader_id.to_string(),
         max_bytes: 1024 * 1024,
+        raw: false,
     };
 
     let buf = encode_client_frame(ClientMessage::Poll(req), 1024);
@@ -440,6 +441,14 @@ async fn test_commit_offsets() {
         poll_resp.end_offset.0 > poll_resp.start_offset.0,
         "Should have dispatched records"
     );
+    // The response must carry the lease's records, not just the range:
+    // committing an empty-bodied lease would silently skip data.
+    let polled_records: usize = poll_resp.results.iter().map(|r| r.records.len()).sum();
+    assert_eq!(
+        polled_records as u64,
+        poll_resp.end_offset.0 - poll_resp.start_offset.0,
+        "poll response records must cover the leased range"
+    );
 
     // Commit the polled range.
     let commit_resp = commit_offsets(
@@ -454,6 +463,99 @@ async fn test_commit_offsets() {
 
     assert!(commit_resp.success, "Commit should succeed");
 
+    ws.close(None).await.ok();
+}
+
+/// Test: raw (zero-copy) poll returns compressed segments covering exactly
+/// the leased range; client-side decode yields the produced records.
+#[tokio::test]
+async fn test_raw_poll_zero_copy() {
+    let db = TestDb::new().await;
+    let topic_id = db.create_topic("cg-raw-poll-test").await;
+    let temp_dir = TempDir::new().unwrap();
+
+    let (addr, _server_handle) = start_server(db.pool.clone(), &temp_dir).await;
+    let url = format!("ws://{}", addr);
+
+    let (mut ws_writer, _) = connect_async(&url).await.expect("Failed to connect");
+    let records: Vec<Record> = (0..10)
+        .map(|i| Record {
+            key: Some(Bytes::from(format!("k{i}"))),
+            value: Bytes::from(format!("value-{i}")),
+        })
+        .collect();
+    let append_resp = ws_append(&mut ws_writer, TopicId(topic_id as u32), records).await;
+    assert!(append_resp.success);
+    ws_writer.close(None).await.ok();
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    let (mut ws, _) = connect_async(&url).await.expect("Failed to connect");
+    let join_resp = join_group(&mut ws, "raw-group", TopicId(topic_id as u32), "reader-1").await;
+    assert!(join_resp.success);
+
+    // Raw poll: same lease mechanics, compressed segments in the response.
+    let req = reader::PollRequest {
+        group_id: "raw-group".to_string(),
+        topic_id: TopicId(topic_id as u32),
+        reader_id: "reader-1".to_string(),
+        max_bytes: 1024 * 1024,
+        raw: true,
+    };
+    let buf = encode_client_frame(ClientMessage::Poll(req), 1024);
+    ws.send(Message::Binary(buf)).await.unwrap();
+    let response = tokio::time::timeout(Duration::from_secs(5), ws.next())
+        .await
+        .expect("Timeout")
+        .expect("No response")
+        .expect("Error");
+    let data = match response {
+        Message::Binary(data) => data,
+        _ => panic!("Expected binary"),
+    };
+    let poll_resp = match decode_server_frame(&data) {
+        ServerMessage::Poll(resp) => resp,
+        _ => panic!("expected poll response"),
+    };
+
+    assert!(poll_resp.success);
+    assert!(poll_resp.results.is_empty(), "raw poll returns no decoded records");
+    assert!(!poll_resp.raw_segments.is_empty(), "raw poll returns segments");
+
+    // Segments exactly cover the lease.
+    assert_eq!(
+        poll_resp.raw_segments.first().unwrap().start_offset,
+        poll_resp.start_offset
+    );
+    assert_eq!(
+        poll_resp.raw_segments.last().unwrap().end_offset,
+        poll_resp.end_offset
+    );
+
+    // Client-side decode (CRC-verified) yields the produced records.
+    let mut decoded = Vec::new();
+    for seg in &poll_resp.raw_segments {
+        decoded.extend(
+            flux_wire::segment::decode_segment(&seg.payload, Some(seg.crc32))
+                .expect("segment decode"),
+        );
+    }
+    assert_eq!(decoded.len(), 10);
+    for (i, rec) in decoded.iter().enumerate() {
+        assert_eq!(rec.key.as_deref(), Some(format!("k{i}").as_bytes()));
+        assert_eq!(rec.value.as_ref(), format!("value-{i}").as_bytes());
+    }
+
+    // Commit the lease exactly as in classic mode.
+    let commit_resp = commit_offsets(
+        &mut ws,
+        "raw-group",
+        "reader-1",
+        TopicId(topic_id as u32),
+        poll_resp.start_offset,
+        poll_resp.end_offset,
+    )
+    .await;
+    assert!(commit_resp.success);
     ws.close(None).await.ok();
 }
 

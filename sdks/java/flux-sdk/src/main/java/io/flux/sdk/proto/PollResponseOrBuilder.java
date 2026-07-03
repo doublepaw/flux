@@ -75,4 +75,48 @@ public interface PollResponseOrBuilder extends
    * @return The leaseDeadlineMs.
    */
   long getLeaseDeadlineMs();
+
+  /**
+   * <pre>
+   * Populated instead of `results` when the poll requested raw mode.
+   * </pre>
+   *
+   * <code>repeated .flux.wire.RawSegment raw_segments = 8;</code>
+   */
+  java.util.List<io.flux.sdk.proto.RawSegment> 
+      getRawSegmentsList();
+  /**
+   * <pre>
+   * Populated instead of `results` when the poll requested raw mode.
+   * </pre>
+   *
+   * <code>repeated .flux.wire.RawSegment raw_segments = 8;</code>
+   */
+  io.flux.sdk.proto.RawSegment getRawSegments(int index);
+  /**
+   * <pre>
+   * Populated instead of `results` when the poll requested raw mode.
+   * </pre>
+   *
+   * <code>repeated .flux.wire.RawSegment raw_segments = 8;</code>
+   */
+  int getRawSegmentsCount();
+  /**
+   * <pre>
+   * Populated instead of `results` when the poll requested raw mode.
+   * </pre>
+   *
+   * <code>repeated .flux.wire.RawSegment raw_segments = 8;</code>
+   */
+  java.util.List<? extends io.flux.sdk.proto.RawSegmentOrBuilder> 
+      getRawSegmentsOrBuilderList();
+  /**
+   * <pre>
+   * Populated instead of `results` when the poll requested raw mode.
+   * </pre>
+   *
+   * <code>repeated .flux.wire.RawSegment raw_segments = 8;</code>
+   */
+  io.flux.sdk.proto.RawSegmentOrBuilder getRawSegmentsOrBuilder(
+      int index);
 }

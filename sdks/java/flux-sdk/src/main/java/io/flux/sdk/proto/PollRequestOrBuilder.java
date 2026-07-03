@@ -45,4 +45,15 @@ public interface PollRequestOrBuilder extends
    * @return The maxBytes.
    */
   int getMaxBytes();
+
+  /**
+   * <pre>
+   * Zero-copy: return compressed segments (raw_segments) instead of
+   * decoded records; the client decodes locally.
+   * </pre>
+   *
+   * <code>bool raw = 5;</code>
+   * @return The raw.
+   */
+  boolean getRaw();
 }

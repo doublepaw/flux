@@ -197,50 +197,51 @@ public final class FluxWire extends com.google.protobuf.GeneratedFile {
       "\030\003 \001(\t\"{\n\021HeartbeatResponse\022\017\n\007success\030\001" +
       " \001(\010\022\022\n\nerror_code\030\002 \001(\r\022\025\n\rerror_messag" +
       "e\030\003 \001(\t\022*\n\006status\030\004 \001(\0162\032.flux.wire.Hear" +
-      "tbeatStatus\"W\n\013PollRequest\022\020\n\010group_id\030\001" +
+      "tbeatStatus\"d\n\013PollRequest\022\020\n\010group_id\030\001" +
       " \001(\t\022\020\n\010topic_id\030\002 \001(\r\022\021\n\treader_id\030\003 \001(" +
-      "\t\022\021\n\tmax_bytes\030\004 \001(\r\"\270\001\n\014PollResponse\022\017\n" +
-      "\007success\030\001 \001(\010\022\022\n\nerror_code\030\002 \001(\r\022\025\n\rer" +
-      "ror_message\030\003 \001(\t\022\'\n\007results\030\004 \003(\0132\026.flu" +
-      "x.wire.TopicResult\022\024\n\014start_offset\030\005 \001(\004" +
-      "\022\022\n\nend_offset\030\006 \001(\004\022\031\n\021lease_deadline_m" +
-      "s\030\007 \001(\004\"J\n\021LeaveGroupRequest\022\020\n\010group_id" +
-      "\030\001 \001(\t\022\020\n\010topic_id\030\002 \001(\r\022\021\n\treader_id\030\003 " +
-      "\001(\t\"P\n\022LeaveGroupResponse\022\017\n\007success\030\001 \001" +
-      "(\010\022\022\n\nerror_code\030\002 \001(\r\022\025\n\rerror_message\030" +
-      "\003 \001(\t\"p\n\rCommitRequest\022\020\n\010group_id\030\001 \001(\t" +
-      "\022\021\n\treader_id\030\002 \001(\t\022\020\n\010topic_id\030\003 \001(\r\022\024\n" +
-      "\014start_offset\030\004 \001(\004\022\022\n\nend_offset\030\005 \001(\004\"" +
-      "L\n\016CommitResponse\022\017\n\007success\030\001 \001(\010\022\022\n\ner" +
-      "ror_code\030\002 \001(\r\022\025\n\rerror_message\030\003 \001(\t\"\036\n" +
-      "\013AuthRequest\022\017\n\007api_key\030\001 \001(\t\"J\n\014AuthRes" +
-      "ponse\022\017\n\007success\030\001 \001(\010\022\022\n\nerror_code\030\002 \001" +
-      "(\r\022\025\n\rerror_message\030\003 \001(\t\"\263\003\n\rClientMess" +
-      "age\022*\n\006append\030\001 \001(\0132\030.flux.wire.AppendRe" +
-      "questH\000\022&\n\004read\030\002 \001(\0132\026.flux.wire.ReadRe" +
-      "questH\000\0221\n\njoin_group\030\003 \001(\0132\033.flux.wire." +
-      "JoinGroupRequestH\000\0220\n\theartbeat\030\004 \001(\0132\033." +
-      "flux.wire.HeartbeatRequestH\000\022&\n\004poll\030\005 \001" +
-      "(\0132\026.flux.wire.PollRequestH\000\0223\n\013leave_gr" +
-      "oup\030\006 \001(\0132\034.flux.wire.LeaveGroupRequestH" +
-      "\000\022*\n\006commit\030\007 \001(\0132\030.flux.wire.CommitRequ" +
-      "estH\000\022&\n\004auth\030\010 \001(\0132\026.flux.wire.AuthRequ" +
-      "estH\000\022-\n\010raw_read\030\t \001(\0132\031.flux.wire.RawR" +
-      "eadRequestH\000B\t\n\007message\"\274\003\n\rServerMessag" +
-      "e\022+\n\006append\030\001 \001(\0132\031.flux.wire.AppendResp" +
-      "onseH\000\022\'\n\004read\030\002 \001(\0132\027.flux.wire.ReadRes" +
-      "ponseH\000\0222\n\njoin_group\030\003 \001(\0132\034.flux.wire." +
-      "JoinGroupResponseH\000\0221\n\theartbeat\030\004 \001(\0132\034" +
-      ".flux.wire.HeartbeatResponseH\000\022\'\n\004poll\030\005" +
-      " \001(\0132\027.flux.wire.PollResponseH\000\0224\n\013leave" +
-      "_group\030\006 \001(\0132\035.flux.wire.LeaveGroupRespo" +
-      "nseH\000\022+\n\006commit\030\007 \001(\0132\031.flux.wire.Commit" +
-      "ResponseH\000\022\'\n\004auth\030\010 \001(\0132\027.flux.wire.Aut" +
-      "hResponseH\000\022.\n\010raw_read\030\t \001(\0132\032.flux.wir" +
-      "e.RawReadResponseH\000B\t\n\007message*O\n\017Heartb" +
-      "eatStatus\022\027\n\023HEARTBEAT_STATUS_OK\020\000\022#\n\037HE" +
-      "ARTBEAT_STATUS_UNKNOWN_MEMBER\020\001B\025\n\021io.fl" +
-      "ux.sdk.protoP\001b\006proto3"
+      "\t\022\021\n\tmax_bytes\030\004 \001(\r\022\013\n\003raw\030\005 \001(\010\"\345\001\n\014Po" +
+      "llResponse\022\017\n\007success\030\001 \001(\010\022\022\n\nerror_cod" +
+      "e\030\002 \001(\r\022\025\n\rerror_message\030\003 \001(\t\022\'\n\007result" +
+      "s\030\004 \003(\0132\026.flux.wire.TopicResult\022\024\n\014start" +
+      "_offset\030\005 \001(\004\022\022\n\nend_offset\030\006 \001(\004\022\031\n\021lea" +
+      "se_deadline_ms\030\007 \001(\004\022+\n\014raw_segments\030\010 \003" +
+      "(\0132\025.flux.wire.RawSegment\"J\n\021LeaveGroupR" +
+      "equest\022\020\n\010group_id\030\001 \001(\t\022\020\n\010topic_id\030\002 \001" +
+      "(\r\022\021\n\treader_id\030\003 \001(\t\"P\n\022LeaveGroupRespo" +
+      "nse\022\017\n\007success\030\001 \001(\010\022\022\n\nerror_code\030\002 \001(\r" +
+      "\022\025\n\rerror_message\030\003 \001(\t\"p\n\rCommitRequest" +
+      "\022\020\n\010group_id\030\001 \001(\t\022\021\n\treader_id\030\002 \001(\t\022\020\n" +
+      "\010topic_id\030\003 \001(\r\022\024\n\014start_offset\030\004 \001(\004\022\022\n" +
+      "\nend_offset\030\005 \001(\004\"L\n\016CommitResponse\022\017\n\007s" +
+      "uccess\030\001 \001(\010\022\022\n\nerror_code\030\002 \001(\r\022\025\n\rerro" +
+      "r_message\030\003 \001(\t\"\036\n\013AuthRequest\022\017\n\007api_ke" +
+      "y\030\001 \001(\t\"J\n\014AuthResponse\022\017\n\007success\030\001 \001(\010" +
+      "\022\022\n\nerror_code\030\002 \001(\r\022\025\n\rerror_message\030\003 " +
+      "\001(\t\"\263\003\n\rClientMessage\022*\n\006append\030\001 \001(\0132\030." +
+      "flux.wire.AppendRequestH\000\022&\n\004read\030\002 \001(\0132" +
+      "\026.flux.wire.ReadRequestH\000\0221\n\njoin_group\030" +
+      "\003 \001(\0132\033.flux.wire.JoinGroupRequestH\000\0220\n\t" +
+      "heartbeat\030\004 \001(\0132\033.flux.wire.HeartbeatReq" +
+      "uestH\000\022&\n\004poll\030\005 \001(\0132\026.flux.wire.PollReq" +
+      "uestH\000\0223\n\013leave_group\030\006 \001(\0132\034.flux.wire." +
+      "LeaveGroupRequestH\000\022*\n\006commit\030\007 \001(\0132\030.fl" +
+      "ux.wire.CommitRequestH\000\022&\n\004auth\030\010 \001(\0132\026." +
+      "flux.wire.AuthRequestH\000\022-\n\010raw_read\030\t \001(" +
+      "\0132\031.flux.wire.RawReadRequestH\000B\t\n\007messag" +
+      "e\"\274\003\n\rServerMessage\022+\n\006append\030\001 \001(\0132\031.fl" +
+      "ux.wire.AppendResponseH\000\022\'\n\004read\030\002 \001(\0132\027" +
+      ".flux.wire.ReadResponseH\000\0222\n\njoin_group\030" +
+      "\003 \001(\0132\034.flux.wire.JoinGroupResponseH\000\0221\n" +
+      "\theartbeat\030\004 \001(\0132\034.flux.wire.HeartbeatRe" +
+      "sponseH\000\022\'\n\004poll\030\005 \001(\0132\027.flux.wire.PollR" +
+      "esponseH\000\0224\n\013leave_group\030\006 \001(\0132\035.flux.wi" +
+      "re.LeaveGroupResponseH\000\022+\n\006commit\030\007 \001(\0132" +
+      "\031.flux.wire.CommitResponseH\000\022\'\n\004auth\030\010 \001" +
+      "(\0132\027.flux.wire.AuthResponseH\000\022.\n\010raw_rea" +
+      "d\030\t \001(\0132\032.flux.wire.RawReadResponseH\000B\t\n" +
+      "\007message*O\n\017HeartbeatStatus\022\027\n\023HEARTBEAT" +
+      "_STATUS_OK\020\000\022#\n\037HEARTBEAT_STATUS_UNKNOWN" +
+      "_MEMBER\020\001B\025\n\021io.flux.sdk.protoP\001b\006proto3"
     };
     descriptor = com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
@@ -341,13 +342,13 @@ public final class FluxWire extends com.google.protobuf.GeneratedFile {
     internal_static_flux_wire_PollRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_flux_wire_PollRequest_descriptor,
-        new java.lang.String[] { "GroupId", "TopicId", "ReaderId", "MaxBytes", });
+        new java.lang.String[] { "GroupId", "TopicId", "ReaderId", "MaxBytes", "Raw", });
     internal_static_flux_wire_PollResponse_descriptor =
       getDescriptor().getMessageType(16);
     internal_static_flux_wire_PollResponse_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_flux_wire_PollResponse_descriptor,
-        new java.lang.String[] { "Success", "ErrorCode", "ErrorMessage", "Results", "StartOffset", "EndOffset", "LeaseDeadlineMs", });
+        new java.lang.String[] { "Success", "ErrorCode", "ErrorMessage", "Results", "StartOffset", "EndOffset", "LeaseDeadlineMs", "RawSegments", });
     internal_static_flux_wire_LeaveGroupRequest_descriptor =
       getDescriptor().getMessageType(17);
     internal_static_flux_wire_LeaveGroupRequest_fieldAccessorTable = new

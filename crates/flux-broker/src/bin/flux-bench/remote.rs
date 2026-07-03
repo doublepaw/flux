@@ -221,13 +221,34 @@ async fn run_writer(
     let mut ws = connect_with_retry(&cfg.url).await?;
     let writer_id = WriterId::new();
 
-    let payload = bytes::Bytes::from(vec![0xB5u8 ^ (index as u8); cfg.record_size]);
-    let template: Vec<Record> = (0..cfg.records_per_batch)
-        .map(|_| Record {
-            key: None,
-            value: payload.clone(),
-        })
-        .collect();
+    // Incompressible payloads (xorshift PRNG), unique per record and per
+    // request: keeps compressed size ~= decoded size so lease budgets and
+    // wire numbers reflect real workloads instead of zstd flattering
+    // repeated bytes.
+    let mut prng_state =
+        0x9E3779B97F4A7C15u64 ^ (index as u64).wrapping_mul(0xD1B54A32D192ED03) | 1;
+    let mut fill_random = move |buf: &mut [u8]| {
+        for chunk in buf.chunks_mut(8) {
+            prng_state ^= prng_state << 13;
+            prng_state ^= prng_state >> 7;
+            prng_state ^= prng_state << 17;
+            let bytes = prng_state.to_le_bytes();
+            let n = chunk.len();
+            chunk.copy_from_slice(&bytes[..n]);
+        }
+    };
+    let mut make_records = move || -> Vec<Record> {
+        (0..cfg.records_per_batch)
+            .map(|_| {
+                let mut buf = vec![0u8; cfg.record_size];
+                fill_random(&mut buf);
+                Record {
+                    key: None,
+                    value: bytes::Bytes::from(buf),
+                }
+            })
+            .collect()
+    };
 
     struct InFlight {
         frame: Vec<u8>,
@@ -250,7 +271,7 @@ async fn run_writer(
                 batches: vec![RecordBatch {
                     topic_id,
                     schema_id: SchemaId(100),
-                    records: template.clone(),
+                    records: make_records(),
                 }],
             };
             let frame = encode_frame(ClientMessage::Append(req), frame_capacity);

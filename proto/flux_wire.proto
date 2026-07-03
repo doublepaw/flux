@@ -122,6 +122,9 @@ message PollRequest {
   uint32 topic_id = 2;
   string reader_id = 3;
   uint32 max_bytes = 4;
+  // Zero-copy: return compressed segments (raw_segments) instead of
+  // decoded records; the client decodes locally.
+  bool raw = 5;
 }
 
 message PollResponse {
@@ -132,6 +135,8 @@ message PollResponse {
   uint64 start_offset = 5;
   uint64 end_offset = 6;
   uint64 lease_deadline_ms = 7;
+  // Populated instead of `results` when the poll requested raw mode.
+  repeated RawSegment raw_segments = 8;
 }
 
 message LeaveGroupRequest {

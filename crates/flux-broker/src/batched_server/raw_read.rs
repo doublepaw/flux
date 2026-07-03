@@ -34,7 +34,7 @@ pub(crate) async fn handle_raw_read_request<S: ObjectStore + Send + Sync + 'stat
     let cache_key = (req.topic_id.0, req.offset.0);
     let result = match state.raw_readahead.take(cache_key) {
         Some((segments, high_watermark)) => Ok((segments, high_watermark)),
-        None => fetch_raw_segments(req.topic_id, req.offset, req.max_bytes as usize, state).await,
+        None => fetch_raw_segments(req.topic_id, req.offset, None, req.max_bytes as usize, state).await,
     };
 
     // Prefetch the next window while the consumer decodes this one.
@@ -50,7 +50,7 @@ pub(crate) async fn handle_raw_read_request<S: ObjectStore + Send + Sync + 'stat
                 let max_bytes = req.max_bytes as usize;
                 tokio::spawn(async move {
                     let prefetched =
-                        fetch_raw_segments(topic_id, Offset(next_offset), max_bytes, &state)
+                        fetch_raw_segments(topic_id, Offset(next_offset), None, max_bytes, &state)
                             .await
                             .ok()
                             .map(|(segments, hwm)| {
@@ -91,11 +91,12 @@ pub(crate) async fn handle_raw_read_request<S: ObjectStore + Send + Sync + 'stat
 /// Select index rows covering `max_bytes` of *compressed* data starting at
 /// `offset`, fetch the raw segment ranges concurrently, and return them
 /// untouched.
-async fn fetch_raw_segments<S: ObjectStore + Send + Sync>(
+pub(crate) async fn fetch_raw_segments<S: ObjectStore + Send + Sync>(
     topic_id: TopicId,
     offset: Offset,
+    end_offset: Option<Offset>,
     max_bytes: usize,
-    state: &Arc<BrokerState<S>>,
+    state: &BrokerState<S>,
 ) -> Result<RawWindow, BrokerError> {
     let rows: Vec<(i32, i64, i64, String, i64, i64, i64, i64)> = sqlx::query_as(
         r#"
@@ -109,21 +110,23 @@ async fn fetch_raw_segments<S: ObjectStore + Send + Sync>(
             FROM topic_batches
             WHERE topic_id = $1
               AND end_offset > $2
+              AND ($3::bigint IS NULL OR start_offset < $3)
             ORDER BY start_offset
-            LIMIT $3
+            LIMIT $4
         )
         SELECT c.schema_id, c.start_offset, c.end_offset, c.s3_key,
                c.byte_offset, c.byte_length, c.crc32,
                (SELECT COALESCE(next_offset, 0) FROM topic_offsets WHERE topic_id = $1)
         FROM candidate c
-        WHERE c.running < $4
+        WHERE c.running < $5
         ORDER BY c.start_offset
         "#,
     )
     .bind(topic_id.0 as i32)
     .bind(offset.0 as i64)
+    .bind(end_offset.map(|e| e.0 as i64))
     .bind(MAX_BATCHES_PER_FETCH)
-    .bind(max_bytes as i64)
+    .bind(i64::try_from(max_bytes).unwrap_or(i64::MAX))
     .fetch_all(&state.pool)
     .await?;
 

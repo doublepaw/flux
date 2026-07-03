@@ -48,6 +48,9 @@ pub struct ReaderConfig {
     pub timeout: Duration,
     /// Heartbeat interval.
     pub heartbeat_interval: Duration,
+    /// Zero-copy polls: the broker returns compressed segments and the SDK
+    /// decodes them locally (CRC-verified).
+    pub raw: bool,
 }
 
 impl Default for ReaderConfig {
@@ -61,6 +64,7 @@ impl Default for ReaderConfig {
             max_bytes: 1024 * 1024, // 1 MB
             timeout: Duration::from_secs(30),
             heartbeat_interval: Duration::from_secs(10),
+            raw: false,
         }
     }
 }
@@ -218,6 +222,7 @@ impl GroupReader {
             topic_id: self.config.topic_id,
             reader_id: self.config.reader_id.clone(),
             max_bytes: self.config.max_bytes,
+            raw: self.config.raw,
         };
 
         let resp = self.send_request(ClientMessage::Poll(req), 8192).await?;
@@ -240,7 +245,7 @@ impl GroupReader {
             self.inflight.write().await.push((start_offset, end_offset));
         }
 
-        let results = response
+        let mut results: Vec<ReadResult> = response
             .results
             .into_iter()
             .map(|r| ReadResult {
@@ -250,6 +255,18 @@ impl GroupReader {
                 records: r.records,
             })
             .collect();
+
+        // Raw mode: decode compressed segments locally (CRC-verified).
+        for seg in response.raw_segments {
+            let records = flux_wire::segment::decode_segment(&seg.payload, Some(seg.crc32))
+                .map_err(|e| SdkError::Decode(format!("segment decode: {e}")))?;
+            results.push(ReadResult {
+                topic_id: seg.topic_id,
+                schema_id: seg.schema_id,
+                high_watermark: end_offset,
+                records,
+            });
+        }
 
         Ok(PollBatch {
             results,

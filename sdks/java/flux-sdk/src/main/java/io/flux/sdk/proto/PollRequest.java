@@ -145,6 +145,22 @@ private static final long serialVersionUID = 0L;
     return maxBytes_;
   }
 
+  public static final int RAW_FIELD_NUMBER = 5;
+  private boolean raw_ = false;
+  /**
+   * <pre>
+   * Zero-copy: return compressed segments (raw_segments) instead of
+   * decoded records; the client decodes locally.
+   * </pre>
+   *
+   * <code>bool raw = 5;</code>
+   * @return The raw.
+   */
+  @java.lang.Override
+  public boolean getRaw() {
+    return raw_;
+  }
+
   private byte memoizedIsInitialized = -1;
   @java.lang.Override
   public final boolean isInitialized() {
@@ -171,6 +187,9 @@ private static final long serialVersionUID = 0L;
     if (maxBytes_ != 0) {
       output.writeUInt32(4, maxBytes_);
     }
+    if (raw_ != false) {
+      output.writeBool(5, raw_);
+    }
     getUnknownFields().writeTo(output);
   }
 
@@ -193,6 +212,10 @@ private static final long serialVersionUID = 0L;
     if (maxBytes_ != 0) {
       size += com.google.protobuf.CodedOutputStream
         .computeUInt32Size(4, maxBytes_);
+    }
+    if (raw_ != false) {
+      size += com.google.protobuf.CodedOutputStream
+        .computeBoolSize(5, raw_);
     }
     size += getUnknownFields().getSerializedSize();
     memoizedSize = size;
@@ -217,6 +240,8 @@ private static final long serialVersionUID = 0L;
         .equals(other.getReaderId())) return false;
     if (getMaxBytes()
         != other.getMaxBytes()) return false;
+    if (getRaw()
+        != other.getRaw()) return false;
     if (!getUnknownFields().equals(other.getUnknownFields())) return false;
     return true;
   }
@@ -236,6 +261,9 @@ private static final long serialVersionUID = 0L;
     hash = (53 * hash) + getReaderId().hashCode();
     hash = (37 * hash) + MAX_BYTES_FIELD_NUMBER;
     hash = (53 * hash) + getMaxBytes();
+    hash = (37 * hash) + RAW_FIELD_NUMBER;
+    hash = (53 * hash) + com.google.protobuf.Internal.hashBoolean(
+        getRaw());
     hash = (29 * hash) + getUnknownFields().hashCode();
     memoizedHashCode = hash;
     return hash;
@@ -371,6 +399,7 @@ private static final long serialVersionUID = 0L;
       topicId_ = 0;
       readerId_ = "";
       maxBytes_ = 0;
+      raw_ = false;
       return this;
     }
 
@@ -416,6 +445,9 @@ private static final long serialVersionUID = 0L;
       if (((from_bitField0_ & 0x00000008) != 0)) {
         result.maxBytes_ = maxBytes_;
       }
+      if (((from_bitField0_ & 0x00000010) != 0)) {
+        result.raw_ = raw_;
+      }
     }
 
     @java.lang.Override
@@ -445,6 +477,9 @@ private static final long serialVersionUID = 0L;
       }
       if (other.getMaxBytes() != 0) {
         setMaxBytes(other.getMaxBytes());
+      }
+      if (other.getRaw() != false) {
+        setRaw(other.getRaw());
       }
       this.mergeUnknownFields(other.getUnknownFields());
       onChanged();
@@ -492,6 +527,11 @@ private static final long serialVersionUID = 0L;
               bitField0_ |= 0x00000008;
               break;
             } // case 32
+            case 40: {
+              raw_ = input.readBool();
+              bitField0_ |= 0x00000010;
+              break;
+            } // case 40
             default: {
               if (!super.parseUnknownField(input, extensionRegistry, tag)) {
                 done = true; // was an endgroup tag
@@ -713,6 +753,53 @@ private static final long serialVersionUID = 0L;
     public Builder clearMaxBytes() {
       bitField0_ = (bitField0_ & ~0x00000008);
       maxBytes_ = 0;
+      onChanged();
+      return this;
+    }
+
+    private boolean raw_ ;
+    /**
+     * <pre>
+     * Zero-copy: return compressed segments (raw_segments) instead of
+     * decoded records; the client decodes locally.
+     * </pre>
+     *
+     * <code>bool raw = 5;</code>
+     * @return The raw.
+     */
+    @java.lang.Override
+    public boolean getRaw() {
+      return raw_;
+    }
+    /**
+     * <pre>
+     * Zero-copy: return compressed segments (raw_segments) instead of
+     * decoded records; the client decodes locally.
+     * </pre>
+     *
+     * <code>bool raw = 5;</code>
+     * @param value The raw to set.
+     * @return This builder for chaining.
+     */
+    public Builder setRaw(boolean value) {
+
+      raw_ = value;
+      bitField0_ |= 0x00000010;
+      onChanged();
+      return this;
+    }
+    /**
+     * <pre>
+     * Zero-copy: return compressed segments (raw_segments) instead of
+     * decoded records; the client decodes locally.
+     * </pre>
+     *
+     * <code>bool raw = 5;</code>
+     * @return This builder for chaining.
+     */
+    public Builder clearRaw() {
+      bitField0_ = (bitField0_ & ~0x00000010);
+      raw_ = false;
       onChanged();
       return this;
     }

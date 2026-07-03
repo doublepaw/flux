@@ -16,6 +16,7 @@ public class ReaderConfig {
     private String readerId = UUID.randomUUID().toString();
     private int topicId = 1;
     private int maxBytes = 1024 * 1024; // 1 MB
+    private boolean rawPoll = false;
     private Duration timeout = Duration.ofSeconds(30);
     private Duration heartbeatInterval = Duration.ofSeconds(10);
 
@@ -51,6 +52,15 @@ public class ReaderConfig {
         return this;
     }
 
+    /**
+     * When true, polls request zero-copy raw segments and the reader decodes
+     * them locally. Poll results and commits behave the same as classic polls.
+     */
+    public ReaderConfig rawPoll(boolean rawPoll) {
+        this.rawPoll = rawPoll;
+        return this;
+    }
+
     public ReaderConfig timeout(Duration timeout) {
         this.timeout = timeout;
         return this;
@@ -83,6 +93,10 @@ public class ReaderConfig {
 
     public int getMaxBytes() {
         return maxBytes;
+    }
+
+    public boolean isRawPoll() {
+        return rawPoll;
     }
 
     public Duration getTimeout() {

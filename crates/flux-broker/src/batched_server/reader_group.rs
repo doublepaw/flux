@@ -107,15 +107,18 @@ pub(crate) async fn handle_poll<S: ObjectStore + Send + Sync>(
     let result = process_poll(&req, state).await;
 
     let response = match result {
-        Ok((results, start_offset, end_offset, lease_deadline_ms)) => reader::PollResponse {
-            success: true,
-            error_code: STATUS_OK,
-            error_message: String::new(),
-            results,
-            start_offset,
-            end_offset,
-            lease_deadline_ms,
-        },
+        Ok((results, raw_segments, start_offset, end_offset, lease_deadline_ms)) => {
+            reader::PollResponse {
+                success: true,
+                error_code: STATUS_OK,
+                error_message: String::new(),
+                results,
+                start_offset,
+                end_offset,
+                lease_deadline_ms,
+                raw_segments,
+            }
+        }
         Err(BrokerError::MaxInflight) => {
             warn!("Poll rejected: max inflight for reader {}", req.reader_id);
             reader::PollResponse {
@@ -126,6 +129,7 @@ pub(crate) async fn handle_poll<S: ObjectStore + Send + Sync>(
                 start_offset: Offset(0),
                 end_offset: Offset(0),
                 lease_deadline_ms: 0,
+                raw_segments: vec![],
             }
         }
         Err(e) => {
@@ -138,6 +142,7 @@ pub(crate) async fn handle_poll<S: ObjectStore + Send + Sync>(
                 start_offset: Offset(0),
                 end_offset: Offset(0),
                 lease_deadline_ms: 0,
+                raw_segments: vec![],
             }
         }
     };
@@ -147,17 +152,30 @@ pub(crate) async fn handle_poll<S: ObjectStore + Send + Sync>(
         .iter()
         .flat_map(|r| &r.records)
         .map(|rec| rec.value.len() + rec.key.as_ref().map(|k| k.len()).unwrap_or(0) + 32)
-        .sum();
+        .sum::<usize>()
+        + response
+            .raw_segments
+            .iter()
+            .map(|s| s.payload.len() + 64)
+            .sum::<usize>();
     let buf_size = (total_record_bytes + 1024).max(64 * 1024);
 
     encode_server_message_vec(ServerMessage::Poll(response), buf_size + 16)
 }
 
 /// Dispatch an offset range via the coordinator and fetch the records.
+type PollOutcome = (
+    Vec<reader::TopicResult>,
+    Vec<reader::RawSegment>,
+    Offset,
+    Offset,
+    u64,
+);
+
 async fn process_poll<S: ObjectStore + Send + Sync>(
     req: &reader::PollRequest,
     state: &BrokerState<S>,
-) -> Result<(Vec<reader::TopicResult>, Offset, Offset, u64), BrokerError> {
+) -> Result<PollOutcome, BrokerError> {
     let poll_result = state
         .coordinator
         .poll(&req.group_id, req.topic_id, &req.reader_id, req.max_bytes)
@@ -172,19 +190,38 @@ async fn process_poll<S: ObjectStore + Send + Sync>(
     let lease_deadline_ms = poll_result.lease_deadline_ms;
 
     if start_offset == end_offset {
-        return Ok((vec![], start_offset, end_offset, lease_deadline_ms));
+        return Ok((vec![], vec![], start_offset, end_offset, lease_deadline_ms));
     }
 
+    // Zero-copy: leases are segment-aligned by construction (the coordinator
+    // accumulates whole index rows), so the raw segments in [start, end)
+    // exactly cover the lease.
+    if req.raw {
+        let (segments, _high_watermark) = super::raw_read::fetch_raw_segments(
+            req.topic_id,
+            start_offset,
+            Some(end_offset),
+            req.max_bytes as usize,
+            state,
+        )
+        .await?;
+        return Ok((vec![], segments, start_offset, end_offset, lease_deadline_ms));
+    }
+
+    // Fetch the ENTIRE lease: the coordinator already budgeted it (in
+    // compressed bytes), and the client commits [start, end) wholesale — a
+    // second decoded-byte budget here would silently drop the tail of the
+    // lease for compressible payloads (committed but never delivered).
     let (results, _high_watermark) = fetch_records(
         req.topic_id,
         start_offset,
         Some(end_offset),
-        req.max_bytes as usize,
+        usize::MAX,
         state,
     )
     .await?;
 
-    Ok((results, start_offset, end_offset, lease_deadline_ms))
+    Ok((results, vec![], start_offset, end_offset, lease_deadline_ms))
 }
 
 /// Handle a LeaveGroupRequest.

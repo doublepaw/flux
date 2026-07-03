@@ -3,6 +3,7 @@
 
 package io.flux.sdk;
 
+import com.google.protobuf.ByteString;
 import io.flux.sdk.proto.AuthRequest;
 import io.flux.sdk.proto.ClientMessage;
 import io.flux.sdk.proto.CommitRequest;
@@ -12,6 +13,8 @@ import io.flux.sdk.proto.JoinGroupRequest;
 import io.flux.sdk.proto.LeaveGroupRequest;
 import io.flux.sdk.proto.PollRequest;
 import io.flux.sdk.proto.PollResponse;
+import io.flux.sdk.proto.RawSegment;
+import io.flux.sdk.proto.Record;
 import io.flux.sdk.proto.ServerMessage;
 import io.flux.sdk.proto.TopicResult;
 import org.java_websocket.client.WebSocketClient;
@@ -24,6 +27,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
@@ -49,7 +53,32 @@ public class GroupReader implements AutoCloseable {
 
     private final ReaderConfig config;
     private final FluxWebSocketClient client;
-    private final BlockingQueue<byte[]> responseQueue;
+    private final ResponseRouter responseQueue;
+
+    /// Routes each server message to a per-type queue so concurrent request
+    /// threads (poll/commit vs the heartbeat loop) receive their own replies.
+    static final class ResponseRouter {
+        private final ConcurrentHashMap<ServerMessage.MessageCase, BlockingQueue<byte[]>> queues =
+                new ConcurrentHashMap<>();
+
+        private BlockingQueue<byte[]> queueFor(ServerMessage.MessageCase c) {
+            return queues.computeIfAbsent(c, k -> new LinkedBlockingQueue<>(RESPONSE_QUEUE_CAPACITY));
+        }
+
+        void route(byte[] data) {
+            ServerMessage.MessageCase c;
+            try {
+                c = ServerMessage.parseFrom(data).getMessageCase();
+            } catch (Exception e) {
+                c = ServerMessage.MessageCase.MESSAGE_NOT_SET;
+            }
+            queueFor(c).offer(data);
+        }
+
+        byte[] take(ServerMessage.MessageCase c, long timeoutMs) throws InterruptedException {
+            return queueFor(c).poll(timeoutMs, TimeUnit.MILLISECONDS);
+        }
+    }
 
     /**
      * A batch of results from a single poll, with offset range and lease deadline.
@@ -81,7 +110,7 @@ public class GroupReader implements AutoCloseable {
     private final AtomicBoolean running = new AtomicBoolean(true);
     private ScheduledExecutorService heartbeatExecutor;
 
-    private GroupReader(ReaderConfig config, FluxWebSocketClient client, BlockingQueue<byte[]> responseQueue) {
+    private GroupReader(ReaderConfig config, FluxWebSocketClient client, ResponseRouter responseQueue) {
         this.config = config;
         this.client = client;
         this.responseQueue = responseQueue;
@@ -90,7 +119,7 @@ public class GroupReader implements AutoCloseable {
     public static GroupReader join(ReaderConfig config) throws FluxException {
         try {
             URI uri = new URI(config.getUrl());
-            BlockingQueue<byte[]> responseQueue = new LinkedBlockingQueue<>(RESPONSE_QUEUE_CAPACITY);
+            ResponseRouter responseQueue = new ResponseRouter();
             FluxWebSocketClient client = new FluxWebSocketClient(uri, responseQueue);
 
             if (!client.connectBlocking(config.getTimeout().toMillis(), TimeUnit.MILLISECONDS)) {
@@ -118,7 +147,7 @@ public class GroupReader implements AutoCloseable {
         client.send(authMessage.toByteArray());
 
         try {
-            byte[] response = responseQueue.poll(config.getTimeout().toMillis(), TimeUnit.MILLISECONDS);
+            byte[] response = responseQueue.take(ServerMessage.MessageCase.AUTH, config.getTimeout().toMillis());
             if (response == null) {
                 throw new FluxException.TimeoutException("Authentication timeout");
             }
@@ -172,7 +201,7 @@ public class GroupReader implements AutoCloseable {
 
             client.send(ClientMessage.newBuilder().setHeartbeat(req).build().toByteArray());
 
-            byte[] response = responseQueue.poll(config.getTimeout().toMillis(), TimeUnit.MILLISECONDS);
+            byte[] response = responseQueue.take(ServerMessage.MessageCase.HEARTBEAT, config.getTimeout().toMillis());
             if (response == null) {
                 log.warn("Heartbeat timeout");
                 return;
@@ -242,11 +271,12 @@ public class GroupReader implements AutoCloseable {
                 .setTopicId(config.getTopicId())
                 .setReaderId(config.getReaderId())
                 .setMaxBytes(config.getMaxBytes())
+                .setRaw(config.isRawPoll())
                 .build();
         client.send(ClientMessage.newBuilder().setPoll(req).build().toByteArray());
 
         try {
-            byte[] response = responseQueue.poll(config.getTimeout().toMillis(), TimeUnit.MILLISECONDS);
+            byte[] response = responseQueue.take(ServerMessage.MessageCase.POLL, config.getTimeout().toMillis());
             if (response == null) {
                 throw new FluxException.TimeoutException("Poll timeout");
             }
@@ -272,8 +302,13 @@ public class GroupReader implements AutoCloseable {
                 }
             }
 
+            List<TopicResult> results = new ArrayList<>(resp.getResultsList());
+            for (RawSegment segment : resp.getRawSegmentsList()) {
+                results.add(decodeRawSegment(segment, resp.getEndOffset()));
+            }
+
             return new PollBatch(
-                    new ArrayList<>(resp.getResultsList()),
+                    results,
                     resp.getStartOffset(),
                     resp.getEndOffset(),
                     resp.getLeaseDeadlineMs()
@@ -284,6 +319,28 @@ public class GroupReader implements AutoCloseable {
         } catch (com.google.protobuf.InvalidProtocolBufferException e) {
             throw new FluxException.ProtocolException("Failed to decode response", e);
         }
+    }
+
+    /** Decode a compressed raw segment into the same shape as a classic poll result. */
+    private static TopicResult decodeRawSegment(RawSegment segment, long highWatermark) throws FluxException {
+        List<SegmentDecoder.DecodedRecord> decoded = SegmentDecoder.decode(
+                segment.getPayload().toByteArray(),
+                Integer.toUnsignedLong(segment.getCrc32())
+        );
+
+        TopicResult.Builder result = TopicResult.newBuilder()
+                .setTopicId(segment.getTopicId())
+                .setSchemaId(segment.getSchemaId())
+                .setHighWatermark(highWatermark);
+        for (SegmentDecoder.DecodedRecord record : decoded) {
+            Record.Builder builder = Record.newBuilder()
+                    .setValue(ByteString.copyFrom(record.getValue()));
+            if (record.getKey() != null) {
+                builder.setKey(ByteString.copyFrom(record.getKey()));
+            }
+            result.addRecords(builder);
+        }
+        return result.build();
     }
 
     public void commit(PollBatch batch) throws FluxException {
@@ -301,7 +358,7 @@ public class GroupReader implements AutoCloseable {
         client.send(ClientMessage.newBuilder().setCommit(req).build().toByteArray());
 
         try {
-            byte[] response = responseQueue.poll(config.getTimeout().toMillis(), TimeUnit.MILLISECONDS);
+            byte[] response = responseQueue.take(ServerMessage.MessageCase.COMMIT, config.getTimeout().toMillis());
             if (response == null) {
                 throw new FluxException.TimeoutException("Commit timeout");
             }
@@ -342,7 +399,7 @@ public class GroupReader implements AutoCloseable {
         client.send(ClientMessage.newBuilder().setJoinGroup(req).build().toByteArray());
 
         try {
-            byte[] response = responseQueue.poll(config.getTimeout().toMillis(), TimeUnit.MILLISECONDS);
+            byte[] response = responseQueue.take(ServerMessage.MessageCase.JOIN_GROUP, config.getTimeout().toMillis());
             if (response == null) {
                 throw new FluxException.TimeoutException("Join timeout");
             }
@@ -413,9 +470,9 @@ public class GroupReader implements AutoCloseable {
 
     private static class FluxWebSocketClient extends WebSocketClient {
         private static final Logger log = LoggerFactory.getLogger(FluxWebSocketClient.class);
-        private final BlockingQueue<byte[]> responseQueue;
+        private final ResponseRouter responseQueue;
 
-        public FluxWebSocketClient(URI serverUri, BlockingQueue<byte[]> responseQueue) {
+        public FluxWebSocketClient(URI serverUri, ResponseRouter responseQueue) {
             super(serverUri);
             this.responseQueue = responseQueue;
         }
@@ -434,7 +491,7 @@ public class GroupReader implements AutoCloseable {
         public void onMessage(ByteBuffer bytes) {
             byte[] data = new byte[bytes.remaining()];
             bytes.get(data);
-            responseQueue.offer(data);
+            responseQueue.route(data);
         }
 
         @Override

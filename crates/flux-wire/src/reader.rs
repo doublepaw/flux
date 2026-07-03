@@ -84,6 +84,8 @@ pub struct PollRequest {
     pub topic_id: TopicId,
     pub reader_id: String,
     pub max_bytes: u32,
+    /// Zero-copy: return compressed segments instead of decoded records.
+    pub raw: bool,
 }
 
 /// Poll response — broker hands out offset range and records.
@@ -96,6 +98,8 @@ pub struct PollResponse {
     pub start_offset: Offset,
     pub end_offset: Offset,
     pub lease_deadline_ms: u64,
+    /// Populated instead of `results` for raw-mode polls.
+    pub raw_segments: Vec<RawSegment>,
 }
 
 /// Commit request — reader commits a processed offset range.
@@ -298,6 +302,7 @@ pub fn encode_poll_request(req: &PollRequest, buf: &mut [u8]) -> usize {
         topic_id: req.topic_id.0,
         reader_id: req.reader_id.clone(),
         max_bytes: req.max_bytes,
+        raw: req.raw,
     };
     encode_proto(&msg, buf)
 }
@@ -310,6 +315,7 @@ pub fn decode_poll_request(buf: &[u8]) -> Result<(PollRequest, usize), DecodeErr
             topic_id: TopicId(msg.topic_id),
             reader_id: msg.reader_id,
             max_bytes: msg.max_bytes,
+            raw: msg.raw,
         },
         buf.len(),
     ))
@@ -331,6 +337,7 @@ pub fn encode_poll_response_checked(
         start_offset: resp.start_offset.0,
         end_offset: resp.end_offset.0,
         lease_deadline_ms: resp.lease_deadline_ms,
+        raw_segments: resp.raw_segments.iter().map(to_proto_raw_segment).collect(),
     };
     encode_proto_checked(&msg, buf)
 }
@@ -350,6 +357,11 @@ pub fn decode_poll_response(buf: &[u8]) -> Result<(PollResponse, usize), DecodeE
             start_offset: Offset(msg.start_offset),
             end_offset: Offset(msg.end_offset),
             lease_deadline_ms: msg.lease_deadline_ms,
+            raw_segments: msg
+                .raw_segments
+                .into_iter()
+                .map(from_proto_raw_segment)
+                .collect(),
         },
         buf.len(),
     ))
@@ -615,6 +627,28 @@ pub fn decode_raw_read_request(buf: &[u8]) -> Result<(RawReadRequest, usize), De
         },
         buf.len(),
     ))
+}
+
+fn to_proto_raw_segment(s: &RawSegment) -> proto::RawSegment {
+    proto::RawSegment {
+        topic_id: s.topic_id.0,
+        schema_id: s.schema_id.0,
+        start_offset: s.start_offset.0,
+        end_offset: s.end_offset.0,
+        crc32: s.crc32,
+        payload: s.payload.to_vec(),
+    }
+}
+
+fn from_proto_raw_segment(s: proto::RawSegment) -> RawSegment {
+    RawSegment {
+        topic_id: TopicId(s.topic_id),
+        schema_id: SchemaId(s.schema_id),
+        start_offset: Offset(s.start_offset),
+        end_offset: Offset(s.end_offset),
+        crc32: s.crc32,
+        payload: bytes::Bytes::from(s.payload),
+    }
 }
 
 pub fn encode_raw_read_response_checked(

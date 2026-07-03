@@ -596,6 +596,87 @@ async fn run_java_raw_reader(
     parse_output::<ReadResult>(output, "Java raw reader")
 }
 
+/// Run Java raw group consumer (zero-copy poll path).
+async fn run_java_raw_group_reader(
+    url: &str,
+    topic_id: i32,
+    expected_count: i32,
+) -> Result<ReadResult, String> {
+    let root = project_root();
+    let jar_path = root.join("sdks/java/flux-sdk/target/flux-sdk-0.1.0.jar");
+    let dependency_glob = root.join("sdks/java/flux-sdk/target/dependency/*");
+    let test_classes = root.join("tests/cross_language");
+    let compile_classpath = format!("{}:{}", jar_path.display(), dependency_glob.display());
+
+    let compile_output = TokioCommand::new("javac")
+        .arg("-cp")
+        .arg(&compile_classpath)
+        .arg("-d")
+        .arg(&test_classes)
+        .arg(test_classes.join("JavaRawGroupReader.java"))
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run javac for raw group reader: {}", e))?;
+    if !compile_output.status.success() {
+        return Err(format!(
+            "Failed to compile Java raw group reader\nstderr: {}",
+            String::from_utf8_lossy(&compile_output.stderr)
+        ));
+    }
+
+    let classpath = format!(
+        "{}:{}:{}",
+        jar_path.display(),
+        dependency_glob.display(),
+        test_classes.display()
+    );
+    let output = TokioCommand::new("java")
+        .arg("-cp")
+        .arg(&classpath)
+        .arg("io.flux.test.JavaRawGroupReader")
+        .arg(url)
+        .arg(topic_id.to_string())
+        .arg(expected_count.to_string())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run Java raw group reader: {}", e))?;
+
+    parse_output::<ReadResult>(output, "Java raw group reader")
+}
+
+/// Test: Java writer -> Rust broker -> Java raw group consumer (zero-copy poll)
+#[tokio::test]
+async fn test_java_raw_group_consume() {
+    let _lock = cross_language_test_lock().await;
+    assert_cross_language_prerequisites(false, true).await;
+
+    let db = TestDb::new().await;
+    let topic_id = db.create_topic("java-raw-group-test").await;
+    let temp_dir = TempDir::new().unwrap();
+
+    let (addr, _server_handle) = start_server(db.pool.clone(), &temp_dir).await;
+    let url = format!("ws://{}", addr);
+
+    let produce_result = run_java_writer(&url, topic_id, 9)
+        .await
+        .expect("Java writer should succeed");
+    assert_eq!(produce_result.record_count, 9);
+
+    let consume_result = run_java_raw_group_reader(&url, topic_id, 9)
+        .await
+        .expect("Java raw group reader should succeed");
+
+    assert_eq!(consume_result.reader, "java-raw-group");
+    assert_eq!(consume_result.record_count, 9);
+    for (i, record) in consume_result.records.iter().enumerate() {
+        assert_eq!(record.key, Some(format!("java-key-{}", i)));
+        assert_eq!(record.value["source"], "java");
+        assert_eq!(record.value["index"], i as f64); // JSON numbers come as f64
+    }
+}
+
 /// Test: Java writer -> Rust broker -> Java zero-copy raw reader
 #[tokio::test]
 async fn test_java_raw_read() {

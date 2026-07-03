@@ -68,7 +68,7 @@ pub(crate) async fn fetch_records<S: ObjectStore + Send + Sync>(
     .bind(start_offset.0 as i64)
     .bind(end_offset.map(|e| e.0 as i64))
     .bind(MAX_BATCHES_PER_FETCH)
-    .bind(max_bytes as i64)
+    .bind(i64::try_from(max_bytes).unwrap_or(i64::MAX))
     .fetch_all(&state.pool)
     .await?;
 
