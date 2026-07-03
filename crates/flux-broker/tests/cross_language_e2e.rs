@@ -197,6 +197,30 @@ async fn run_python_reader(
     parse_output::<ReadResult>(output, "Python reader")
 }
 
+/// Run Python raw (zero-copy) reader.
+async fn run_python_raw_reader(
+    url: &str,
+    topic_id: i32,
+    expected_count: i32,
+) -> Result<ReadResult, String> {
+    let root = project_root();
+    let script = root.join("tests/cross_language/python_raw_reader.py");
+
+    let output = TokioCommand::new("python3")
+        .arg(&script)
+        .arg(url)
+        .arg(topic_id.to_string())
+        .arg(expected_count.to_string())
+        .env("PYTHONPATH", root.join("sdks/python"))
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run Python raw reader: {}", e))?;
+
+    parse_output::<ReadResult>(output, "Python raw reader")
+}
+
 /// Run Java writer.
 async fn run_java_writer(
     url: &str,
@@ -487,6 +511,119 @@ async fn test_python_to_python() {
         assert_eq!(record.key, Some(format!("py-key-{}", i)));
         assert_eq!(record.value["source"], "python");
         assert_eq!(record.value["index"], i as i64);
+    }
+}
+
+/// Test: Python writer -> Rust broker -> Python zero-copy raw reader
+#[tokio::test]
+async fn test_python_raw_read() {
+    let _lock = cross_language_test_lock().await;
+    assert_cross_language_prerequisites(true, false).await;
+
+    let db = TestDb::new().await;
+    let topic_id = db.create_topic("py-raw-read-test").await;
+    let temp_dir = TempDir::new().unwrap();
+
+    let (addr, _server_handle) = start_server(db.pool.clone(), &temp_dir).await;
+    let url = format!("ws://{}", addr);
+
+    let produce_result = run_python_writer(&url, topic_id, 7)
+        .await
+        .expect("Python writer should succeed");
+    assert_eq!(produce_result.record_count, 7);
+
+    let consume_result = run_python_raw_reader(&url, topic_id, 7)
+        .await
+        .expect("Python raw reader should succeed");
+
+    assert_eq!(consume_result.reader, "python-raw");
+    assert_eq!(consume_result.record_count, 7);
+    for (i, record) in consume_result.records.iter().enumerate() {
+        assert_eq!(record.key, Some(format!("py-key-{}", i)));
+        assert_eq!(record.value["source"], "python");
+        assert_eq!(record.value["index"], i as i64);
+    }
+}
+
+
+/// Run Java raw (zero-copy) reader.
+async fn run_java_raw_reader(
+    url: &str,
+    topic_id: i32,
+    expected_count: i32,
+) -> Result<ReadResult, String> {
+    let root = project_root();
+    let jar_path = root.join("sdks/java/flux-sdk/target/flux-sdk-0.1.0.jar");
+    let dependency_glob = root.join("sdks/java/flux-sdk/target/dependency/*");
+    let test_classes = root.join("tests/cross_language");
+    let compile_classpath = format!("{}:{}", jar_path.display(), dependency_glob.display());
+
+    let compile_output = TokioCommand::new("javac")
+        .arg("-cp")
+        .arg(&compile_classpath)
+        .arg("-d")
+        .arg(&test_classes)
+        .arg(test_classes.join("JavaRawReader.java"))
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run javac for raw reader: {}", e))?;
+    if !compile_output.status.success() {
+        return Err(format!(
+            "Failed to compile Java raw reader\nstderr: {}",
+            String::from_utf8_lossy(&compile_output.stderr)
+        ));
+    }
+
+    let classpath = format!(
+        "{}:{}:{}",
+        jar_path.display(),
+        dependency_glob.display(),
+        test_classes.display()
+    );
+    let output = TokioCommand::new("java")
+        .arg("-cp")
+        .arg(&classpath)
+        .arg("io.flux.test.JavaRawReader")
+        .arg(url)
+        .arg(topic_id.to_string())
+        .arg(expected_count.to_string())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run Java raw reader: {}", e))?;
+
+    parse_output::<ReadResult>(output, "Java raw reader")
+}
+
+/// Test: Java writer -> Rust broker -> Java zero-copy raw reader
+#[tokio::test]
+async fn test_java_raw_read() {
+    let _lock = cross_language_test_lock().await;
+    assert_cross_language_prerequisites(false, true).await;
+
+    let db = TestDb::new().await;
+    let topic_id = db.create_topic("java-raw-read-test").await;
+    let temp_dir = TempDir::new().unwrap();
+
+    let (addr, _server_handle) = start_server(db.pool.clone(), &temp_dir).await;
+    let url = format!("ws://{}", addr);
+
+    let produce_result = run_java_writer(&url, topic_id, 7)
+        .await
+        .expect("Java writer should succeed");
+    assert_eq!(produce_result.record_count, 7);
+
+    let consume_result = run_java_raw_reader(&url, topic_id, 7)
+        .await
+        .expect("Java raw reader should succeed");
+
+    assert_eq!(consume_result.reader, "java-raw");
+    assert_eq!(consume_result.record_count, 7);
+    for (i, record) in consume_result.records.iter().enumerate() {
+        assert_eq!(record.key, Some(format!("java-key-{}", i)));
+        assert_eq!(record.value["source"], "java");
+        assert_eq!(record.value["index"], i as f64); // JSON numbers come as f64
     }
 }
 

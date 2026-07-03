@@ -83,7 +83,7 @@ public class JavaRawReader {
             }
 
             Map<String, Object> result = new LinkedHashMap<>();
-            result.put("reader", "java");
+            result.put("reader", "java-raw");
             result.put("topic_id", topicId);
             result.put("record_count", recordsReceived.size());
             result.put("records", recordsReceived);
