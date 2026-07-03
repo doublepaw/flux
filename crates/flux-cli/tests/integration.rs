@@ -116,6 +116,7 @@ impl TestCluster {
             flush_interval: Duration::from_millis(50),
             require_auth: false,
             auth_timeout: Duration::from_secs(10),
+            readahead_max_bytes: 0,
             #[cfg(feature = "iceberg")]
             iceberg: None,
         };
