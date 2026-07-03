@@ -544,6 +544,7 @@ mod tests {
             topic_id: TopicId(1),
             reader_id: "reader-1".to_string(),
             max_bytes: 1024,
+            raw: false,
         };
 
         let mut buf = [0u8; 512];

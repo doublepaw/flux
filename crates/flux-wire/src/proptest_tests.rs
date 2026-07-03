@@ -237,6 +237,7 @@ fn arb_poll_request() -> impl Strategy<Value = reader::PollRequest> {
             topic_id: TopicId(topic_id),
             reader_id,
             max_bytes,
+            raw: false,
         },
     )
 }
@@ -257,7 +258,8 @@ fn arb_poll_response() -> impl Strategy<Value = reader::PollResponse> {
                 start_offset: Offset(start_offset),
                 end_offset: Offset(end_offset),
                 lease_deadline_ms,
-            }
+            raw_segments: vec![],
+        }
         })
 }
 
