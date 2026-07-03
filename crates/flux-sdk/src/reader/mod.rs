@@ -488,6 +488,7 @@ mod tests {
             topic_id: TopicId(1),
             reader_id: "test-reader".to_string(),
             max_bytes: 2048,
+            raw: false,
         };
 
         let mut buf = vec![0u8; 1024];

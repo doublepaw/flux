@@ -504,6 +504,7 @@ mod tests {
             start_offset: Offset(100),
             end_offset: Offset(200),
             lease_deadline_ms: 1234567890,
+            raw_segments: vec![],
         });
         let mut buf = vec![0u8; 1024];
         let len = encode_server_message(&msg, &mut buf).unwrap();
