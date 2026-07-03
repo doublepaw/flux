@@ -110,6 +110,14 @@ public class GroupReader implements AutoCloseable {
     private final AtomicBoolean running = new AtomicBoolean(true);
     private ScheduledExecutorService heartbeatExecutor;
 
+    // Pipelined polling: a background prefetcher keeps `pipelineDepth` poll
+    // requests outstanding and decodes responses ahead of the application,
+    // so network transfer, decode, and application processing overlap.
+    private BlockingQueue<PollBatch> readyBatches;
+    private Thread prefetchThread;
+    private final java.util.concurrent.atomic.AtomicReference<FluxException> prefetchError =
+            new java.util.concurrent.atomic.AtomicReference<>();
+
     private GroupReader(ReaderConfig config, FluxWebSocketClient client, ResponseRouter responseQueue) {
         this.config = config;
         this.client = client;
@@ -131,6 +139,7 @@ public class GroupReader implements AutoCloseable {
                 reader.authenticate(config.getApiKey());
             }
             reader.doJoin();
+            reader.startPrefetcher();
             return reader;
         } catch (Exception e) {
             if (e instanceof FluxException) {
@@ -243,6 +252,9 @@ public class GroupReader implements AutoCloseable {
         if (heartbeatExecutor != null) {
             heartbeatExecutor.shutdown();
         }
+        if (prefetchThread != null) {
+            prefetchThread.interrupt();
+        }
 
         doLeave();
     }
@@ -266,6 +278,36 @@ public class GroupReader implements AutoCloseable {
             stateLock.readLock().unlock();
         }
 
+        FluxException failed = prefetchError.get();
+        if (failed != null) {
+            throw failed;
+        }
+
+        try {
+            PollBatch batch = readyBatches.poll(config.getTimeout().toMillis(), TimeUnit.MILLISECONDS);
+            if (batch == null) {
+                failed = prefetchError.get();
+                if (failed != null) {
+                    throw failed;
+                }
+                throw new FluxException.TimeoutException("Poll timeout");
+            }
+            return batch;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new FluxException.ConnectionException("Interrupted", e);
+        }
+    }
+
+    private void startPrefetcher() {
+        int depth = config.getPipelineDepth();
+        readyBatches = new LinkedBlockingQueue<>(depth);
+        prefetchThread = new Thread(() -> prefetchLoop(depth), "flux-poll-prefetcher");
+        prefetchThread.setDaemon(true);
+        prefetchThread.start();
+    }
+
+    private void sendPollRequest() {
         PollRequest req = PollRequest.newBuilder()
                 .setGroupId(config.getGroupId())
                 .setTopicId(config.getTopicId())
@@ -274,50 +316,68 @@ public class GroupReader implements AutoCloseable {
                 .setRaw(config.isRawPoll())
                 .build();
         client.send(ClientMessage.newBuilder().setPoll(req).build().toByteArray());
+    }
 
+    /**
+     * Keeps `depth` poll requests outstanding; decodes each response and
+     * queues the ready batch (bounded queue provides backpressure). Backs off
+     * briefly after empty leases to avoid hot-polling an idle topic.
+     */
+    private void prefetchLoop(int depth) {
         try {
-            byte[] response = responseQueue.take(ServerMessage.MessageCase.POLL, config.getTimeout().toMillis());
-            if (response == null) {
-                throw new FluxException.TimeoutException("Poll timeout");
+            for (int i = 0; i < depth; i++) {
+                sendPollRequest();
             }
+            while (running.get()) {
+                byte[] response = responseQueue.take(
+                        ServerMessage.MessageCase.POLL, config.getTimeout().toMillis());
+                if (response == null) {
+                    // No poll in flight completed within the timeout window;
+                    // the requests are still outstanding, keep waiting.
+                    continue;
+                }
 
-            ServerMessage envelope = ServerMessage.parseFrom(response);
-            if (envelope.getMessageCase() != ServerMessage.MessageCase.POLL) {
-                throw new FluxException.ProtocolException("Unexpected response type or empty response");
-            }
+                ServerMessage envelope = ServerMessage.parseFrom(response);
+                PollResponse resp = envelope.getPoll();
+                if (!resp.getSuccess()) {
+                    throw new FluxException.ProtocolException(
+                            "Poll failed (" + resp.getErrorCode() + "): " + resp.getErrorMessage());
+                }
 
-            PollResponse resp = envelope.getPoll();
-            if (!resp.getSuccess()) {
-                throw new FluxException.ProtocolException(
-                        "Poll failed (" + resp.getErrorCode() + "): " + resp.getErrorMessage()
-                );
-            }
+                if (resp.getStartOffset() != resp.getEndOffset()) {
+                    stateLock.writeLock().lock();
+                    try {
+                        inflight.add(new long[]{resp.getStartOffset(), resp.getEndOffset()});
+                    } finally {
+                        stateLock.writeLock().unlock();
+                    }
+                }
 
-            if (resp.getStartOffset() != resp.getEndOffset()) {
-                stateLock.writeLock().lock();
-                try {
-                    inflight.add(new long[]{resp.getStartOffset(), resp.getEndOffset()});
-                } finally {
-                    stateLock.writeLock().unlock();
+                List<TopicResult> results = new ArrayList<>(resp.getResultsList());
+                for (RawSegment segment : resp.getRawSegmentsList()) {
+                    results.add(decodeRawSegment(segment, resp.getEndOffset()));
+                }
+
+                boolean empty = resp.getStartOffset() == resp.getEndOffset();
+                readyBatches.put(new PollBatch(
+                        results,
+                        resp.getStartOffset(),
+                        resp.getEndOffset(),
+                        resp.getLeaseDeadlineMs()));
+
+                if (empty) {
+                    Thread.sleep(25);
+                }
+                if (running.get()) {
+                    sendPollRequest();
                 }
             }
-
-            List<TopicResult> results = new ArrayList<>(resp.getResultsList());
-            for (RawSegment segment : resp.getRawSegmentsList()) {
-                results.add(decodeRawSegment(segment, resp.getEndOffset()));
-            }
-
-            return new PollBatch(
-                    results,
-                    resp.getStartOffset(),
-                    resp.getEndOffset(),
-                    resp.getLeaseDeadlineMs()
-            );
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new FluxException.ConnectionException("Interrupted", e);
-        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
-            throw new FluxException.ProtocolException("Failed to decode response", e);
+        } catch (FluxException e) {
+            prefetchError.set(e);
+        } catch (Exception e) {
+            prefetchError.set(new FluxException.ProtocolException("Prefetch failed", e));
         }
     }
 

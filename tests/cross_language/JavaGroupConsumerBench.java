@@ -23,7 +23,7 @@ public class JavaGroupConsumerBench {
     private static final int DEFAULT_MAX_BYTES = 8 * 1024 * 1024;
 
     public static void main(String[] args) {
-        if (args.length < 4 || args.length > 5) {
+        if (args.length < 4 || args.length > 6) {
             System.err.println(
                     "Usage: JavaGroupConsumerBench <url> <topic_id> <expected_records> <raw|classic> [max_bytes]");
             System.exit(1);
@@ -37,7 +37,8 @@ public class JavaGroupConsumerBench {
             System.err.println("Mode must be 'raw' or 'classic', got: " + mode);
             System.exit(1);
         }
-        int maxBytes = args.length == 5 ? Integer.parseInt(args[4]) : DEFAULT_MAX_BYTES;
+        int maxBytes = args.length >= 5 ? Integer.parseInt(args[4]) : DEFAULT_MAX_BYTES;
+        int pipelineDepth = args.length >= 6 ? Integer.parseInt(args[5]) : 2;
 
         try {
             String groupId = "bench-java-" + mode + "-" + System.currentTimeMillis();
@@ -46,6 +47,7 @@ public class JavaGroupConsumerBench {
                     .groupId(groupId)
                     .topicId(topicId)
                     .maxBytes(maxBytes)
+                .pipelineDepth(pipelineDepth)
                     .rawPoll(mode.equals("raw"))
                     .heartbeatInterval(Duration.ofSeconds(5));
 

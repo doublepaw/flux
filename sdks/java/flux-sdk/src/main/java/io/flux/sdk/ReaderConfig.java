@@ -16,6 +16,8 @@ public class ReaderConfig {
     private String readerId = UUID.randomUUID().toString();
     private int topicId = 1;
     private int maxBytes = 1024 * 1024; // 1 MB
+    // Outstanding poll requests kept in flight by the prefetcher (1-8).
+    private int pipelineDepth = 2;
     private boolean rawPoll = false;
     private Duration timeout = Duration.ofSeconds(30);
     private Duration heartbeatInterval = Duration.ofSeconds(10);
@@ -45,6 +47,15 @@ public class ReaderConfig {
     public ReaderConfig topicId(int topicId) {
         this.topicId = topicId;
         return this;
+    }
+
+    public ReaderConfig pipelineDepth(int pipelineDepth) {
+        this.pipelineDepth = Math.max(1, Math.min(pipelineDepth, 8));
+        return this;
+    }
+
+    public int getPipelineDepth() {
+        return pipelineDepth;
     }
 
     public ReaderConfig maxBytes(int maxBytes) {
