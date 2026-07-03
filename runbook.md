@@ -181,3 +181,4 @@ az group delete -n $RG --yes --no-wait
 | Azure v2 | same + segment cap 256MB, 256MB reads, read-ahead 4GB | 1,026 | **713** | 297 / 535 | fetch 3.4×: 59.4s → 17.5s |
 | Azure v3 | same + zero-copy raw reads (client-side decode, CRC-verified) | 1,013 | **4,322** | 305 / 540 | fetch 17.5s → 2.9s; wire moves compressed bytes (bench payload ~40× compressible — real workloads compress 2-5×, expect proportionally less) |
 | local v3 | local FS, raw reads | 1,304 | **3,790** | 262 / 317 | fetch faster than produce |
+| AWS v4 (honest) | EKS 2×c6i.4xlarge, S3, **incompressible payloads** | **79** | 267 raw / 278 classic | 4,329 / 4,551 | produce is S3-PUT-bound: single-in-flight flush of ~256MB objects at single-stream S3 upload speed; earlier rows moved ~1/40th the bytes (compressible payloads) |
