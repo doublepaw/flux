@@ -6,6 +6,8 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+zstd = "0.13"
+crc32fast = "1"
 flux-common = { path = "../flux-common" }
 bytes = { workspace = true }
 thiserror = { workspace = true }

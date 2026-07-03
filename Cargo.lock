@@ -2793,12 +2793,14 @@ name = "flux-wire"
 version = "0.1.0"
 dependencies = [
  "bytes",
+ "crc32fast",
  "flux-common",
  "proptest",
  "prost",
  "prost-build",
  "thiserror 1.0.69",
  "uuid",
+ "zstd",
 ]
 
 [[package]]

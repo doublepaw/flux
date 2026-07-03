@@ -21,7 +21,7 @@
 use bytes::{Bytes, BytesMut};
 use flux_common::ids::{Offset, SchemaId, TopicId};
 use flux_common::types::{Record, RecordBatch};
-use flux_wire::{record, varint};
+use flux_wire::varint;
 use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 
@@ -29,7 +29,6 @@ use thiserror::Error;
 const MAGIC: &[u8; 4] = b"FLRN";
 
 /// ZSTD compression level.
-const ZSTD_LEVEL: i32 = 3;
 
 /// Error type for FL operations.
 #[derive(Debug, Error)]
@@ -103,24 +102,10 @@ impl FlWriter {
     ///
     /// Returns the metadata for the added batch (offsets are provisional zeros).
     pub fn add_segment(&mut self, batch: &RecordBatch) -> Result<SegmentMeta, FlError> {
-        // 1. Encode records as array
-        let mut record_bytes = BytesMut::new();
-        for rec in &batch.records {
-            // Calculate needed size: key + value + varint overhead
-            let key_len = rec.key.as_ref().map(|k| k.len()).unwrap_or(0);
-            let value_len = rec.value.len();
-            let buf_size = key_len + value_len + 20; // 20 bytes for varints
-            let mut buf = vec![0u8; buf_size];
-            let len = record::encode(rec, &mut buf);
-            record_bytes.extend_from_slice(&buf[..len]);
-        }
-
-        // 2. Compress with ZSTD
-        let compressed = zstd::encode_all(record_bytes.as_ref(), ZSTD_LEVEL)
+        // Encode + compress via the shared segment codec (flux_wire::segment
+        // is the reference implementation mirrored by the Java/Python SDKs).
+        let (compressed, crc) = flux_wire::segment::encode_segment(&batch.records)
             .map_err(|e| FlError::Compression(e.to_string()))?;
-
-        // 3. Calculate CRC32
-        let crc = crc32fast::hash(&compressed);
 
         // 4. Record byte offset and write
         let byte_offset = self.buffer.len() as u64;
@@ -228,41 +213,15 @@ impl FlReader {
 
         let compressed = &data[start..end];
 
-        // Verify CRC32 if requested
-        if verify_crc {
-            let actual_crc = crc32fast::hash(compressed);
-            if actual_crc != meta.crc32 {
-                return Err(FlError::CrcMismatch {
-                    expected: meta.crc32,
-                    actual: actual_crc,
-                });
+        // Shared segment codec (reference implementation for all SDKs).
+        let expected_crc = verify_crc.then_some(meta.crc32);
+        flux_wire::segment::decode_segment(compressed, expected_crc).map_err(|e| match e {
+            flux_wire::segment::SegmentError::CrcMismatch { expected, actual } => {
+                FlError::CrcMismatch { expected, actual }
             }
-        }
-
-        // Decompress
-        let decompressed =
-            zstd::decode_all(compressed).map_err(|e| FlError::Decompression(e.to_string()))?;
-
-        // Decode records
-        let mut records = Vec::with_capacity(meta.record_count as usize);
-        let mut offset = 0;
-        while offset < decompressed.len() {
-            match record::decode(&decompressed[offset..]) {
-                Ok((rec, len)) => {
-                    records.push(rec);
-                    offset += len;
-                }
-                Err(e) => {
-                    // If we've read the expected number of records, we're done
-                    if records.len() == meta.record_count as usize {
-                        break;
-                    }
-                    return Err(FlError::Decode(e.to_string()));
-                }
-            }
-        }
-
-        Ok(records)
+            flux_wire::segment::SegmentError::Decompression(msg) => FlError::Decompression(msg),
+            other => FlError::Decode(other.to_string()),
+        })
     }
 }
 

@@ -23,6 +23,8 @@ Example usage:
 
 from .writer import Writer, WriterConfig
 from .reader import GroupReader, ReaderConfig, PollBatch
+from .raw_reader import RawReader, RawReadResult, RawSegmentBatch
+from .segment import decode_segment
 from .client import FluxClient, ClientConfig
 from .proto import flux_wire_pb2
 from ._schema import schema, Int32, Float32, NonNull
@@ -42,6 +44,10 @@ __all__ = [
     "GroupReader",
     "ReaderConfig",
     "PollBatch",
+    "RawReader",
+    "RawReadResult",
+    "RawSegmentBatch",
+    "decode_segment",
     "FluxClient",
     "ClientConfig",
     "flux_wire_pb2",

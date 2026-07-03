@@ -26,9 +26,11 @@
 //! ```
 
 pub mod error;
+pub mod raw_reader;
 pub mod reader;
 pub mod writer;
 
 pub use error::SdkError;
+pub use raw_reader::{RawReadResult, RawReader, RawReaderConfig, RawSegmentResult};
 pub use reader::{PollBatch, Reader, ReaderConfig};
 pub use writer::Writer;

@@ -12,6 +12,7 @@ pub(crate) mod proto;
 pub(crate) mod proto_conv;
 pub mod reader;
 pub mod record;
+pub mod segment;
 pub mod status;
 pub mod union;
 pub mod varint;

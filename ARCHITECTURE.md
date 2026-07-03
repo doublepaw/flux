@@ -261,6 +261,34 @@ Broker-side dispatch (no partition assignment):
 └──────────────────────────────────────────────────────┘
 ```
 
+### Segment payload encoding (cross-language compatibility contract)
+
+The bytes inside each segment are a public format: the zero-copy `RawRead`
+protocol ships them to SDKs verbatim, and the Rust (`flux_wire::segment`,
+reference implementation), Java (`SegmentDecoder`), and Python
+(`flux.segment`) decoders must stay wire-compatible.
+
+```
+segment payload = zstd( record_0 ‖ record_1 ‖ ... )     zstd level 3, standard frame
+
+record:
+  key_len   : zigzag varint i64   (-1 = null key)
+  key_bytes : key_len bytes       (absent when null)
+  value_len : zigzag varint i64
+  value     : value_len bytes
+```
+
+- Zigzag varint is Avro-style: 0→0, -1→1, 1→2, ...; little-endian 7-bit
+  groups with a 0x80 continuation bit.
+- Integrity: CRC-32 (IEEE) computed over the *compressed* payload, carried
+  in the segment index (`topic_batches.crc32`) and in `RawSegment.crc32`.
+  Decoders must verify before decompressing.
+- Records are packed back-to-back; decode until the decompressed buffer is
+  exhausted. Record offsets are implicit: the i-th record in a segment has
+  offset `start_offset + i`.
+- Any change here is a breaking protocol change and requires versioning the
+  segment (new codec value in the footer + a `RawSegment` field).
+
 ## Crate Dependency Graph
 
 ```
