@@ -207,10 +207,7 @@ impl flux_broker::ObjectStore for FaultyObjectStore {
         self.inner.put(key, data).await
     }
 
-    async fn get(
-        &self,
-        key: &str,
-    ) -> Result<Bytes, flux_broker::object_store::ObjectStoreError> {
+    async fn get(&self, key: &str) -> Result<Bytes, flux_broker::object_store::ObjectStoreError> {
         // Black-hole: hang until healed
         if self.black_hole_get.load(Ordering::SeqCst) {
             self.unpartition_notify.notified().await;
@@ -283,10 +280,7 @@ impl flux_broker::ObjectStore for FaultyObjectStore {
         Ok(result)
     }
 
-    async fn delete(
-        &self,
-        key: &str,
-    ) -> Result<(), flux_broker::object_store::ObjectStoreError> {
+    async fn delete(&self, key: &str) -> Result<(), flux_broker::object_store::ObjectStoreError> {
         self.inner.delete(key).await
     }
 
@@ -297,10 +291,7 @@ impl flux_broker::ObjectStore for FaultyObjectStore {
         self.inner.list(prefix).await
     }
 
-    async fn size(
-        &self,
-        key: &str,
-    ) -> Result<u64, flux_broker::object_store::ObjectStoreError> {
+    async fn size(&self, key: &str) -> Result<u64, flux_broker::object_store::ObjectStoreError> {
         self.inner.size(key).await
     }
 }

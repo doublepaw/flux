@@ -2615,6 +2615,7 @@ dependencies = [
  "flux-common",
  "flux-iceberg",
  "flux-schema",
+ "flux-sdk",
  "flux-wire",
  "futures",
  "hdrhistogram",

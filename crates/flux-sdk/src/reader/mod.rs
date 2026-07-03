@@ -12,6 +12,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+use futures::stream::{SplitSink, SplitStream};
 use futures::{SinkExt, StreamExt};
 use tokio::net::TcpStream;
 use tokio::sync::{Mutex, RwLock};
@@ -51,6 +52,8 @@ pub struct ReaderConfig {
     /// Zero-copy polls: the broker returns compressed segments and the SDK
     /// decodes them locally (CRC-verified).
     pub raw: bool,
+    /// Outstanding poll requests kept in flight by the prefetcher (1-8).
+    pub pipeline_depth: usize,
 }
 
 impl Default for ReaderConfig {
@@ -65,6 +68,7 @@ impl Default for ReaderConfig {
             timeout: Duration::from_secs(30),
             heartbeat_interval: Duration::from_secs(10),
             raw: false,
+            pipeline_depth: 2,
         }
     }
 }
@@ -99,9 +103,21 @@ pub struct PollBatch {
 }
 
 /// Reader client with broker-side work dispatch.
+type WsSink = SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>;
+type WsStream = SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>;
+type MsgRx = Mutex<tokio::sync::mpsc::UnboundedReceiver<ServerMessage>>;
+
 pub struct GroupReader {
     config: ReaderConfig,
-    ws: Mutex<WebSocketStream<MaybeTlsStream<TcpStream>>>,
+    /// Write half; a router task owns the read half and dispatches responses
+    /// by type so poll prefetching, commits, and heartbeats never race.
+    writer: Mutex<WsSink>,
+    commit_rx: MsgRx,
+    heartbeat_rx: MsgRx,
+    join_rx: MsgRx,
+    leave_rx: MsgRx,
+    /// Prefetched, decoded batches, bounded to `pipeline_depth`.
+    ready_rx: Mutex<tokio::sync::mpsc::Receiver<Result<PollBatch, SdkError>>>,
     state: RwLock<ReaderState>,
     inflight: RwLock<Vec<(Offset, Offset)>>,
     running: AtomicBool,
@@ -118,16 +134,159 @@ impl GroupReader {
             Self::authenticate(&mut ws, api_key).await?;
         }
 
+        let (sink, stream) = ws.split();
+
+        let (poll_tx, poll_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (commit_tx, commit_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (heartbeat_tx, heartbeat_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (join_tx, join_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (leave_tx, leave_rx) = tokio::sync::mpsc::unbounded_channel();
+        tokio::spawn(route_responses(
+            stream,
+            poll_tx,
+            commit_tx,
+            heartbeat_tx,
+            join_tx,
+            leave_tx,
+        ));
+
+        let depth = config.pipeline_depth.clamp(1, 8);
+        let (ready_tx, ready_rx) = tokio::sync::mpsc::channel(depth);
+
         let reader = Arc::new(Self {
             config,
-            ws: Mutex::new(ws),
+            writer: Mutex::new(sink),
+            commit_rx: Mutex::new(commit_rx),
+            heartbeat_rx: Mutex::new(heartbeat_rx),
+            join_rx: Mutex::new(join_rx),
+            leave_rx: Mutex::new(leave_rx),
+            ready_rx: Mutex::new(ready_rx),
             state: RwLock::new(ReaderState::Init),
             inflight: RwLock::new(Vec::new()),
             running: AtomicBool::new(true),
         });
 
         reader.do_join().await?;
+
+        // Prefetcher: keeps `depth` poll requests outstanding and decodes
+        // responses ahead of the application.
+        let prefetch_reader = reader.clone();
+        tokio::spawn(async move {
+            prefetch_reader
+                .prefetch_loop(depth, poll_rx, ready_tx)
+                .await;
+        });
+
         Ok(reader)
+    }
+
+    async fn send_msg(&self, msg: &ClientMessage, buf_size: usize) -> Result<(), SdkError> {
+        let mut buf = vec![0u8; buf_size];
+        let len =
+            encode_client_message(msg, &mut buf).map_err(|e| SdkError::Protocol(e.to_string()))?;
+        buf.truncate(len);
+        self.writer
+            .lock()
+            .await
+            .send(Message::Binary(buf))
+            .await
+            .map_err(|e| SdkError::Connection(e.to_string()))
+    }
+
+    fn send_poll_request(&self) -> ClientMessage {
+        ClientMessage::Poll(reader::PollRequest {
+            group_id: self.config.group_id.clone(),
+            topic_id: self.config.topic_id,
+            reader_id: self.config.reader_id.clone(),
+            max_bytes: self.config.max_bytes,
+            raw: self.config.raw,
+        })
+    }
+
+    async fn prefetch_loop(
+        &self,
+        depth: usize,
+        mut poll_rx: tokio::sync::mpsc::UnboundedReceiver<ServerMessage>,
+        ready_tx: tokio::sync::mpsc::Sender<Result<PollBatch, SdkError>>,
+    ) {
+        let result: Result<(), SdkError> = async {
+            for _ in 0..depth {
+                self.send_msg(&self.send_poll_request(), 8192).await?;
+            }
+            while self.running.load(Ordering::SeqCst) {
+                let msg = poll_rx
+                    .recv()
+                    .await
+                    .ok_or_else(|| SdkError::Connection("connection closed".into()))?;
+                let response = match msg {
+                    ServerMessage::Poll(r) if r.success => r,
+                    ServerMessage::Poll(r) => {
+                        return Err(SdkError::Server {
+                            code: r.error_code,
+                            message: r.error_message,
+                        });
+                    }
+                    _ => return Err(SdkError::InvalidResponse),
+                };
+
+                let batch = self.build_batch(response).await?;
+                let empty = batch.start_offset == batch.end_offset;
+                if ready_tx.send(Ok(batch)).await.is_err() {
+                    break; // reader dropped
+                }
+                if empty {
+                    tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+                }
+                if self.running.load(Ordering::SeqCst) {
+                    self.send_msg(&self.send_poll_request(), 8192).await?;
+                }
+            }
+            Ok(())
+        }
+        .await;
+
+        if let Err(e) = result {
+            let _ = ready_tx.send(Err(e)).await;
+        }
+    }
+
+    async fn build_batch(&self, response: reader::PollResponse) -> Result<PollBatch, SdkError> {
+        let start_offset = response.start_offset;
+        let end_offset = response.end_offset;
+        let lease_deadline_ms = response.lease_deadline_ms;
+
+        if start_offset != end_offset {
+            self.inflight.write().await.push((start_offset, end_offset));
+        }
+
+        let mut results: Vec<ReadResult> = response
+            .results
+            .into_iter()
+            .map(|r| ReadResult {
+                topic_id: r.topic_id,
+                schema_id: r.schema_id,
+                high_watermark: r.high_watermark,
+                records: r.records,
+            })
+            .collect();
+
+        for seg in response.raw_segments {
+            let records = flux_wire::segment::decode_segment(&seg.payload, Some(seg.crc32))
+                .map_err(|e| SdkError::Decode(format!("segment decode: {e}")))?;
+            results.push(ReadResult {
+                topic_id: seg.topic_id,
+                schema_id: seg.schema_id,
+                high_watermark: end_offset,
+                records,
+            });
+        }
+
+        Ok(PollBatch {
+            results,
+            start_offset,
+            end_offset,
+            lease_deadline_ms,
+        })
     }
 
     /// Perform authentication handshake.
@@ -217,63 +376,12 @@ impl GroupReader {
             return Err(SdkError::InvalidState(format!("{:?}", state)));
         }
 
-        let req = reader::PollRequest {
-            group_id: self.config.group_id.clone(),
-            topic_id: self.config.topic_id,
-            reader_id: self.config.reader_id.clone(),
-            max_bytes: self.config.max_bytes,
-            raw: self.config.raw,
-        };
-
-        let resp = self.send_request(ClientMessage::Poll(req), 8192).await?;
-        let response = match resp {
-            ServerMessage::Poll(r) if r.success => r,
-            ServerMessage::Poll(r) => {
-                return Err(SdkError::Server {
-                    code: r.error_code,
-                    message: r.error_message,
-                });
-            }
-            _ => return Err(SdkError::InvalidResponse),
-        };
-
-        let start_offset = response.start_offset;
-        let end_offset = response.end_offset;
-        let lease_deadline_ms = response.lease_deadline_ms;
-
-        if start_offset != end_offset {
-            self.inflight.write().await.push((start_offset, end_offset));
+        let mut ready = self.ready_rx.lock().await;
+        match tokio::time::timeout(self.config.timeout, ready.recv()).await {
+            Ok(Some(batch)) => batch,
+            Ok(None) => Err(SdkError::Connection("prefetcher stopped".into())),
+            Err(_) => Err(SdkError::Timeout),
         }
-
-        let mut results: Vec<ReadResult> = response
-            .results
-            .into_iter()
-            .map(|r| ReadResult {
-                topic_id: r.topic_id,
-                schema_id: r.schema_id,
-                high_watermark: r.high_watermark,
-                records: r.records,
-            })
-            .collect();
-
-        // Raw mode: decode compressed segments locally (CRC-verified).
-        for seg in response.raw_segments {
-            let records = flux_wire::segment::decode_segment(&seg.payload, Some(seg.crc32))
-                .map_err(|e| SdkError::Decode(format!("segment decode: {e}")))?;
-            results.push(ReadResult {
-                topic_id: seg.topic_id,
-                schema_id: seg.schema_id,
-                high_watermark: end_offset,
-                records,
-            });
-        }
-
-        Ok(PollBatch {
-            results,
-            start_offset,
-            end_offset,
-            lease_deadline_ms,
-        })
     }
 
     /// Commit a specific polled batch's offset range.
@@ -433,39 +541,67 @@ impl GroupReader {
         msg: ClientMessage,
         buf_size: usize,
     ) -> Result<ServerMessage, SdkError> {
-        let mut buf = vec![0u8; buf_size];
-        let len =
-            encode_client_message(&msg, &mut buf).map_err(|e| SdkError::Protocol(e.to_string()))?;
-        buf.truncate(len);
+        let rx = match &msg {
+            ClientMessage::Commit(_) => &self.commit_rx,
+            ClientMessage::Heartbeat(_) => &self.heartbeat_rx,
+            ClientMessage::JoinGroup(_) => &self.join_rx,
+            ClientMessage::LeaveGroup(_) => &self.leave_rx,
+            other => {
+                return Err(SdkError::Protocol(format!(
+                    "unsupported request type: {other:?}"
+                )));
+            }
+        };
 
-        let response_data = self.send_and_receive(buf).await?;
-
-        let (response_msg, used) =
-            decode_server_message(&response_data).map_err(|e| SdkError::Decode(e.to_string()))?;
-        if used != response_data.len() {
-            return Err(SdkError::Decode("trailing bytes in response".to_string()));
+        // Hold the type's receiver across send+receive so concurrent callers
+        // of the same request type serialize.
+        let mut rx = rx.lock().await;
+        self.send_msg(&msg, buf_size).await?;
+        match tokio::time::timeout(self.config.timeout, rx.recv()).await {
+            Ok(Some(response)) => Ok(response),
+            Ok(None) => Err(SdkError::Connection("connection closed".into())),
+            Err(_) => Err(SdkError::Timeout),
         }
-
-        Ok(response_msg)
     }
+}
 
-    async fn send_and_receive(&self, buf: Vec<u8>) -> Result<Vec<u8>, SdkError> {
-        let mut ws = self.ws.lock().await;
-
-        ws.send(Message::Binary(buf))
-            .await
-            .map_err(|e| SdkError::Connection(e.to_string()))?;
-
-        let response = tokio::time::timeout(self.config.timeout, ws.next())
-            .await
-            .map_err(|_| SdkError::Timeout)?
-            .ok_or(SdkError::Disconnected)?
-            .map_err(|e| SdkError::Connection(e.to_string()))?;
-
-        match response {
-            Message::Binary(data) => Ok(data),
-            Message::Close(_) => Err(SdkError::Disconnected),
-            _ => Err(SdkError::InvalidResponse),
+/// Reads frames from the socket and dispatches each server message to its
+/// request type's channel. Exits (dropping all senders, which surfaces
+/// connection-closed errors to waiters) when the socket ends.
+async fn route_responses(
+    mut stream: WsStream,
+    poll_tx: tokio::sync::mpsc::UnboundedSender<ServerMessage>,
+    commit_tx: tokio::sync::mpsc::UnboundedSender<ServerMessage>,
+    heartbeat_tx: tokio::sync::mpsc::UnboundedSender<ServerMessage>,
+    join_tx: tokio::sync::mpsc::UnboundedSender<ServerMessage>,
+    leave_tx: tokio::sync::mpsc::UnboundedSender<ServerMessage>,
+) {
+    while let Some(frame) = stream.next().await {
+        let data = match frame {
+            Ok(Message::Binary(data)) => data,
+            Ok(Message::Close(_)) | Err(_) => break,
+            Ok(_) => continue,
+        };
+        let msg = match decode_server_message(&data) {
+            Ok((msg, used)) if used == data.len() => msg,
+            _ => {
+                warn!("dropping undecodable server frame ({} bytes)", data.len());
+                continue;
+            }
+        };
+        let sent = match &msg {
+            ServerMessage::Poll(_) => poll_tx.send(msg).is_ok(),
+            ServerMessage::Commit(_) => commit_tx.send(msg).is_ok(),
+            ServerMessage::Heartbeat(_) => heartbeat_tx.send(msg).is_ok(),
+            ServerMessage::JoinGroup(_) => join_tx.send(msg).is_ok(),
+            ServerMessage::LeaveGroup(_) => leave_tx.send(msg).is_ok(),
+            other => {
+                warn!("unexpected server message: {other:?}");
+                true
+            }
+        };
+        if !sent {
+            break;
         }
     }
 }
