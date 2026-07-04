@@ -62,6 +62,7 @@ pub struct RemoteConfig {
     pub url: String,
     pub database_url: String,
     pub topic: String,
+    pub topics: u32,
     pub writers: usize,
     pub requests_per_writer: u64,
     pub records_per_batch: u32,
@@ -75,7 +76,7 @@ pub struct RemoteConfig {
 
 #[derive(Debug, Serialize)]
 pub struct RemoteReport {
-    pub topic_id: u32,
+    pub topic_ids: Vec<u32>,
     pub requests: u64,
     pub records: u64,
     pub payload_bytes: u64,
@@ -125,12 +126,29 @@ async fn ensure_topic(database_url: &str, name: &str) -> anyhow::Result<u32> {
 }
 
 pub async fn run(cfg: RemoteConfig) -> anyhow::Result<RemoteReport> {
-    let topic_id = TopicId(ensure_topic(&cfg.database_url, &cfg.topic).await?);
+    // Resolve/create the topic set. Writers spread round-robin, so require an
+    // even split to keep per-topic record counts exact for verification.
+    let num_topics = cfg.topics.max(1) as usize;
+    anyhow::ensure!(
+        cfg.writers % num_topics == 0,
+        "writers ({}) must be a multiple of topics ({})",
+        cfg.writers,
+        num_topics
+    );
+    let mut topic_ids = Vec::with_capacity(num_topics);
+    for i in 0..num_topics {
+        let name = if num_topics == 1 {
+            cfg.topic.clone()
+        } else {
+            format!("{}-{}", cfg.topic, i)
+        };
+        topic_ids.push(TopicId(ensure_topic(&cfg.database_url, &name).await?));
+    }
     eprintln!(
-        "remote bench: url={} topic={}({}) writers={} req/writer={} rec/batch={} rec_size={} window={}",
+        "remote bench: url={} topic={} topics={} writers={} req/writer={} rec/batch={} rec_size={} window={}",
         cfg.url,
         cfg.topic,
-        topic_id.0,
+        num_topics,
         cfg.writers,
         cfg.requests_per_writer,
         cfg.records_per_batch,
@@ -143,6 +161,7 @@ pub async fn run(cfg: RemoteConfig) -> anyhow::Result<RemoteReport> {
     let mut handles = Vec::new();
     for w in 0..cfg.writers {
         let cfg = cfg.clone();
+        let topic_id = topic_ids[w % num_topics];
         handles.push(tokio::spawn(
             async move { run_writer(w, cfg, topic_id).await },
         ));
@@ -157,31 +176,35 @@ pub async fn run(cfg: RemoteConfig) -> anyhow::Result<RemoteReport> {
     let requests = cfg.writers as u64 * cfg.requests_per_writer;
     let records = requests * cfg.records_per_batch as u64;
     let payload_bytes = records * cfg.record_size as u64;
+    let records_per_topic = records / num_topics as u64;
 
     // ---- fetch phase ----
     let (fetch_secs, fetch_rec_rps, fetch_mib) = if cfg.skip_fetch {
         (None, None, None)
     } else {
         let fetch_start = Instant::now();
-        let readers = cfg.fetch_readers.max(1) as u64;
-        let stripe = records.div_ceil(readers);
+        // Spread reader connections across topics, striping within each.
+        let stripes_per_topic = (cfg.fetch_readers.max(1) / num_topics).max(1) as u64;
+        let stripe = records_per_topic.div_ceil(stripes_per_topic);
         let mut fetch_handles = Vec::new();
-        for r in 0..readers {
-            let start = r * stripe;
-            let end = ((r + 1) * stripe).min(records);
-            if start >= end {
-                break;
-            }
-            let url = cfg.url.clone();
-            let max_bytes = cfg.max_bytes;
-            let raw = cfg.raw_reads;
-            fetch_handles.push(tokio::spawn(async move {
-                if raw {
-                    fetch_offset_range_raw(&url, topic_id, start, end, max_bytes).await
-                } else {
-                    fetch_offset_range(&url, topic_id, start, end, max_bytes).await
+        for &topic_id in &topic_ids {
+            for r in 0..stripes_per_topic {
+                let start = r * stripe;
+                let end = ((r + 1) * stripe).min(records_per_topic);
+                if start >= end {
+                    break;
                 }
-            }));
+                let url = cfg.url.clone();
+                let max_bytes = cfg.max_bytes;
+                let raw = cfg.raw_reads;
+                fetch_handles.push(tokio::spawn(async move {
+                    if raw {
+                        fetch_offset_range_raw(&url, topic_id, start, end, max_bytes).await
+                    } else {
+                        fetch_offset_range(&url, topic_id, start, end, max_bytes).await
+                    }
+                }));
+            }
         }
         let mut seen = 0u64;
         for h in fetch_handles {
@@ -197,7 +220,7 @@ pub async fn run(cfg: RemoteConfig) -> anyhow::Result<RemoteReport> {
     };
 
     Ok(RemoteReport {
-        topic_id: topic_id.0,
+        topic_ids: topic_ids.iter().map(|t| t.0).collect(),
         requests,
         records,
         payload_bytes,

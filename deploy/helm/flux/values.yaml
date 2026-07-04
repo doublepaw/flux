@@ -56,6 +56,8 @@ bench:
   # Render the benchmark Job (helm upgrade --set bench.enabled=true ...)
   enabled: false
   topic: bench
+  # Topics (named bench-0..N-1 when >1); writers must divide evenly
+  topics: 1
   writers: 40
   requestsPerWriter: 2500
   recordsPerBatch: 128

@@ -73,6 +73,11 @@ enum Commands {
         #[arg(long, default_value = "bench")]
         topic: String,
 
+        /// Number of topics (named <topic>-0..N-1 when N > 1); writers
+        /// spread round-robin and must divide evenly
+        #[arg(long, default_value = "1")]
+        topics: u32,
+
         /// Number of concurrent writer connections
         #[arg(long, default_value = "40")]
         writers: usize,
@@ -522,6 +527,7 @@ async fn main() {
             url,
             database_url,
             topic,
+            topics,
             writers,
             requests_per_writer,
             records_per_batch,
@@ -539,6 +545,7 @@ async fn main() {
                 url,
                 database_url,
                 topic,
+                topics,
                 writers,
                 requests_per_writer,
                 records_per_batch,

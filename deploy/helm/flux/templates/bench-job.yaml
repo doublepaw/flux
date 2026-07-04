@@ -22,6 +22,7 @@ spec:
             - --url=ws://{{ .Release.Name }}-broker:9000
             - --database-url={{ $dbUrl }}
             - --topic={{ .Values.bench.topic }}
+            - --topics={{ .Values.bench.topics | int }}
             - --writers={{ .Values.bench.writers }}
             - --requests-per-writer={{ .Values.bench.requestsPerWriter }}
             - --records-per-batch={{ .Values.bench.recordsPerBatch }}
