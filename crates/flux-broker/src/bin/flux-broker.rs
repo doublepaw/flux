@@ -124,6 +124,7 @@ async fn main() -> Result<()> {
         buffer,
         flush_interval: Duration::from_millis(env_or("FLUSH_INTERVAL_MS", 50u64)),
         readahead_max_bytes: env_or("READAHEAD_MAX_BYTES", 0usize),
+        flush_pipeline_depth: env_or("FLUSH_PIPELINE_DEPTH", 4usize),
         ..Default::default()
     };
 

@@ -76,6 +76,7 @@ async fn start_server(
         #[cfg(feature = "iceberg")]
         iceberg: None,
         readahead_max_bytes: 0,
+            flush_pipeline_depth: 4,
     };
 
     let state = BrokerState::new(pool, store, config).await;

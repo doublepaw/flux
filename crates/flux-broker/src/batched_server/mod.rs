@@ -95,6 +95,9 @@ pub struct BrokerConfig {
     pub auth_timeout: Duration,
     /// Byte cap for the direct-read read-ahead cache (0 = disabled).
     pub readahead_max_bytes: usize,
+    /// Concurrent flushes in flight (object-store puts overlap; commits stay
+    /// in flush order). 1 = classic serial flushing.
+    pub flush_pipeline_depth: usize,
     /// Iceberg ingestion config (None = disabled).
     #[cfg(feature = "iceberg")]
     pub iceberg: Option<flux_iceberg::IcebergConfig>,
@@ -111,6 +114,7 @@ impl Default for BrokerConfig {
             require_auth: false,
             auth_timeout: Duration::from_secs(10),
             readahead_max_bytes: 0,
+            flush_pipeline_depth: 4,
             #[cfg(feature = "iceberg")]
             iceberg: None,
         }

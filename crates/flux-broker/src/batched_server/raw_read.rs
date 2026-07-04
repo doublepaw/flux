@@ -34,7 +34,16 @@ pub(crate) async fn handle_raw_read_request<S: ObjectStore + Send + Sync + 'stat
     let cache_key = (req.topic_id.0, req.offset.0);
     let result = match state.raw_readahead.take(cache_key) {
         Some((segments, high_watermark)) => Ok((segments, high_watermark)),
-        None => fetch_raw_segments(req.topic_id, req.offset, None, req.max_bytes as usize, state).await,
+        None => {
+            fetch_raw_segments(
+                req.topic_id,
+                req.offset,
+                None,
+                req.max_bytes as usize,
+                state,
+            )
+            .await
+        }
     };
 
     // Prefetch the next window while the consumer decodes this one.

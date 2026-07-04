@@ -49,8 +49,13 @@ pub(crate) async fn flush_loop<S: ObjectStore + Send + Sync + 'static>(
 ) {
     let mut buffer = BrokerBuffer::with_config(state.config.buffer.clone());
     let mut flush_interval = tokio::time::interval(state.config.flush_interval);
-    let (flush_done_tx, mut flush_done_rx) = mpsc::channel::<bool>(1);
-    let mut flush_in_flight = false;
+    let max_in_flight = state.config.flush_pipeline_depth.max(1);
+    let (flush_done_tx, mut flush_done_rx) = mpsc::channel::<bool>(max_in_flight.max(1));
+    let mut in_flight = 0usize;
+    // Commit-order chain: each flush waits for its predecessor's commit
+    // before its own, so offsets (and per-writer ordering) follow flush
+    // order even though the object-store puts run concurrently.
+    let mut prev_commit_done: Option<tokio::sync::oneshot::Receiver<()>> = None;
     const MAX_COMMANDS_PER_DRAIN: usize = 2048;
 
     loop {
@@ -100,23 +105,28 @@ pub(crate) async fn flush_loop<S: ObjectStore + Send + Sync + 'static>(
 
                 BUFFER_SIZE_BYTES.set(buffer.size_bytes() as f64);
 
-                if (should_force_flush || buffer.should_flush()) && !flush_in_flight {
-                    flush_in_flight = try_start_flush(&mut buffer, &state, &flush_done_tx);
+                if (should_force_flush || buffer.should_flush()) && in_flight < max_in_flight {
+                    if try_start_flush(&mut buffer, &state, &flush_done_tx, &mut prev_commit_done) {
+                        in_flight += 1;
+                    }
                     BUFFER_SIZE_BYTES.set(buffer.size_bytes() as f64);
                 }
 
                 if should_shutdown {
-                    // Wait for in-flight flush to complete
-                    if flush_in_flight
-                        && let Some(succeeded) = flush_done_rx.recv().await
-                    {
-                        handle_flush_done(succeeded, &mut buffer, &state).await;
+                    // Wait for all in-flight flushes to complete
+                    while in_flight > 0 {
+                        if let Some(succeeded) = flush_done_rx.recv().await {
+                            in_flight -= 1;
+                            handle_flush_done(succeeded, &mut buffer, &state).await;
+                        } else {
+                            break;
+                        }
                     }
                     // Flush any remaining buffered data synchronously
                     if !buffer.is_empty() {
                         let drain_result = buffer.drain();
                         record_drain_metrics(&drain_result);
-                        execute_flush(drain_result, &state).await;
+                        execute_flush(drain_result, &state, prev_commit_done.take()).await;
                     }
                     BUFFER_SIZE_BYTES.set(buffer.size_bytes() as f64);
                     break;
@@ -124,18 +134,22 @@ pub(crate) async fn flush_loop<S: ObjectStore + Send + Sync + 'static>(
             }
             _ = flush_interval.tick() => {
                 // Periodic flush
-                if !buffer.is_empty() && !flush_in_flight {
-                    flush_in_flight = try_start_flush(&mut buffer, &state, &flush_done_tx);
+                if !buffer.is_empty() && in_flight < max_in_flight {
+                    if try_start_flush(&mut buffer, &state, &flush_done_tx, &mut prev_commit_done) {
+                        in_flight += 1;
+                    }
                     BUFFER_SIZE_BYTES.set(buffer.size_bytes() as f64);
                 }
             }
             Some(succeeded) = flush_done_rx.recv() => {
-                flush_in_flight = false;
+                in_flight -= 1;
                 handle_flush_done(succeeded, &mut buffer, &state).await;
 
                 // Start next flush immediately if buffer has pending data
-                if !buffer.is_empty() {
-                    flush_in_flight = try_start_flush(&mut buffer, &state, &flush_done_tx);
+                if !buffer.is_empty() && in_flight < max_in_flight {
+                    if try_start_flush(&mut buffer, &state, &flush_done_tx, &mut prev_commit_done) {
+                        in_flight += 1;
+                    }
                     BUFFER_SIZE_BYTES.set(buffer.size_bytes() as f64);
                 }
             }
@@ -162,6 +176,7 @@ fn try_start_flush<S: ObjectStore + Send + Sync + 'static>(
     buffer: &mut BrokerBuffer,
     state: &Arc<BrokerState<S>>,
     done_tx: &mpsc::Sender<bool>,
+    prev_commit_done: &mut Option<tokio::sync::oneshot::Receiver<()>>,
 ) -> bool {
     let drain_result = buffer.drain();
     if drain_result.batches.is_empty() {
@@ -170,10 +185,17 @@ fn try_start_flush<S: ObjectStore + Send + Sync + 'static>(
 
     record_drain_metrics(&drain_result);
 
+    let predecessor = prev_commit_done.take();
+    let (commit_done_tx, commit_done_rx) = tokio::sync::oneshot::channel();
+    *prev_commit_done = Some(commit_done_rx);
+
     let state = state.clone();
     let done_tx = done_tx.clone();
     tokio::spawn(async move {
-        let succeeded = execute_flush(drain_result, &state).await;
+        let succeeded = execute_flush(drain_result, &state, predecessor).await;
+        // Release the successor's commit turn whether or not this flush
+        // committed (a failed flush simply has nothing to order after).
+        let _ = commit_done_tx.send(());
         let _ = done_tx.send(succeeded).await;
     });
 
@@ -203,6 +225,7 @@ fn record_drain_metrics(drain_result: &DrainResult) {
 async fn execute_flush<S: ObjectStore + Send + Sync>(
     drain_result: DrainResult,
     state: &BrokerState<S>,
+    predecessor_commit: Option<tokio::sync::oneshot::Receiver<()>>,
 ) -> bool {
     let flush_start = Instant::now();
 
@@ -257,6 +280,13 @@ async fn execute_flush<S: ObjectStore + Send + Sync>(
         return false;
     }
     S3_PUT_LATENCY_SECONDS.observe(s3_start.elapsed().as_secs_f64());
+
+    // Wait for the predecessor flush's commit: puts run concurrently, but
+    // commits happen in flush order so offsets follow buffer order and
+    // per-writer sends stay monotonic.
+    if let Some(turn) = predecessor_commit {
+        let _ = turn.await;
+    }
 
     // Commit to database
     let db_start = Instant::now();

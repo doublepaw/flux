@@ -202,9 +202,109 @@ impl S3ObjectStore {
     }
 }
 
+/// Objects at or above this size upload as concurrent multipart parts;
+/// a single PUT is limited to one HTTP stream (~60-90 MB/s on S3).
+const MULTIPART_THRESHOLD: usize = 16 * 1024 * 1024;
+const MULTIPART_PART_SIZE: usize = 16 * 1024 * 1024; // >= S3's 5 MB minimum
+const MULTIPART_CONCURRENCY: usize = 8;
+
+impl S3ObjectStore {
+    async fn put_multipart(&self, key: &str, data: Bytes) -> Result<(), ObjectStoreError> {
+        use futures::StreamExt;
+
+        let s3_err = |e: String| ObjectStoreError::S3 { message: e };
+
+        let upload = self
+            .client
+            .create_multipart_upload()
+            .bucket(&self.bucket)
+            .key(key)
+            .send()
+            .await
+            .map_err(|e| s3_err(format!("create multipart: {e}")))?;
+        let upload_id = upload
+            .upload_id()
+            .ok_or_else(|| s3_err("missing upload id".into()))?
+            .to_string();
+
+        let chunks: Vec<(i32, Bytes)> = (0..data.len())
+            .step_by(MULTIPART_PART_SIZE)
+            .enumerate()
+            .map(|(i, start)| {
+                let end = (start + MULTIPART_PART_SIZE).min(data.len());
+                (i as i32 + 1, data.slice(start..end))
+            })
+            .collect();
+
+        let results: Vec<Result<aws_sdk_s3::types::CompletedPart, String>> =
+            futures::stream::iter(chunks.into_iter().map(|(part_number, chunk)| {
+                let client = self.client.clone();
+                let bucket = self.bucket.clone();
+                let key = key.to_string();
+                let upload_id = upload_id.clone();
+                async move {
+                    let part = client
+                        .upload_part()
+                        .bucket(&bucket)
+                        .key(&key)
+                        .upload_id(&upload_id)
+                        .part_number(part_number)
+                        .body(chunk.into())
+                        .send()
+                        .await
+                        .map_err(|e| format!("upload part {part_number}: {e}"))?;
+                    Ok(aws_sdk_s3::types::CompletedPart::builder()
+                        .part_number(part_number)
+                        .set_e_tag(part.e_tag().map(str::to_string))
+                        .build())
+                }
+            }))
+            .buffer_unordered(MULTIPART_CONCURRENCY)
+            .collect()
+            .await;
+
+        let mut parts = Vec::with_capacity(results.len());
+        for result in results {
+            match result {
+                Ok(part) => parts.push(part),
+                Err(message) => {
+                    let _ = self
+                        .client
+                        .abort_multipart_upload()
+                        .bucket(&self.bucket)
+                        .key(key)
+                        .upload_id(&upload_id)
+                        .send()
+                        .await;
+                    return Err(s3_err(message));
+                }
+            }
+        }
+        parts.sort_by_key(|p| p.part_number());
+
+        self.client
+            .complete_multipart_upload()
+            .bucket(&self.bucket)
+            .key(key)
+            .upload_id(&upload_id)
+            .multipart_upload(
+                aws_sdk_s3::types::CompletedMultipartUpload::builder()
+                    .set_parts(Some(parts))
+                    .build(),
+            )
+            .send()
+            .await
+            .map_err(|e| s3_err(format!("complete multipart: {e}")))?;
+        Ok(())
+    }
+}
+
 #[async_trait]
 impl ObjectStore for S3ObjectStore {
     async fn put(&self, key: &str, data: Bytes) -> Result<(), ObjectStoreError> {
+        if data.len() >= MULTIPART_THRESHOLD {
+            return self.put_multipart(key, data).await;
+        }
         self.client
             .put_object()
             .bucket(&self.bucket)

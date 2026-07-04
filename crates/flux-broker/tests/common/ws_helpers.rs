@@ -53,6 +53,7 @@ pub async fn start_server_with_auth(
         #[cfg(feature = "iceberg")]
         iceberg: None,
         readahead_max_bytes: 0,
+            flush_pipeline_depth: 4,
     };
 
     let state = BrokerState::new(pool, store, config).await;

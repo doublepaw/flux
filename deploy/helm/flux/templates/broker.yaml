@@ -38,6 +38,8 @@ spec:
               value: {{ .Values.broker.segmentMaxBytes | int | quote }}
             - name: READAHEAD_MAX_BYTES
               value: {{ .Values.broker.readaheadMaxBytes | int | quote }}
+            - name: FLUSH_PIPELINE_DEPTH
+              value: {{ .Values.broker.flushPipelineDepth | int | quote }}
             - name: PG_POOL_SIZE
               value: {{ .Values.broker.pgPoolSize | quote }}
             {{- range .Values.broker.extraEnv }}

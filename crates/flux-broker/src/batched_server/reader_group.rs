@@ -205,7 +205,13 @@ async fn process_poll<S: ObjectStore + Send + Sync>(
             state,
         )
         .await?;
-        return Ok((vec![], segments, start_offset, end_offset, lease_deadline_ms));
+        return Ok((
+            vec![],
+            segments,
+            start_offset,
+            end_offset,
+            lease_deadline_ms,
+        ));
     }
 
     // Fetch the ENTIRE lease: the coordinator already budgeted it (in
