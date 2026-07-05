@@ -173,6 +173,8 @@ impl ObjectStore for LocalFsStore {
 pub struct S3ObjectStore {
     client: aws_sdk_s3::Client,
     bucket: String,
+    part_size: usize,
+    part_concurrency: usize,
 }
 
 impl S3ObjectStore {
@@ -183,6 +185,8 @@ impl S3ObjectStore {
         Self {
             client,
             bucket: bucket.into(),
+            part_size: multipart_part_size(),
+            part_concurrency: multipart_concurrency(),
         }
     }
 
@@ -198,15 +202,35 @@ impl S3ObjectStore {
         Self {
             client,
             bucket: bucket.into(),
+            part_size: multipart_part_size(),
+            part_concurrency: multipart_concurrency(),
         }
     }
 }
 
-/// Objects at or above this size upload as concurrent multipart parts;
-/// a single PUT is limited to one HTTP stream (~60-90 MB/s on S3).
-const MULTIPART_THRESHOLD: usize = 16 * 1024 * 1024;
-const MULTIPART_PART_SIZE: usize = 16 * 1024 * 1024; // >= S3's 5 MB minimum
+/// Objects at or above one part size upload as concurrent multipart parts;
+/// a single PUT is limited to one HTTP stream (~60-90 MB/s on S3). Part size
+/// bounds the ack-latency floor (one part = one HTTP stream), so it is
+/// env-tunable; S3 requires parts >= 5 MB.
+const MULTIPART_PART_SIZE: usize = 16 * 1024 * 1024;
 const MULTIPART_CONCURRENCY: usize = 8;
+const S3_MIN_PART_SIZE: usize = 5 * 1024 * 1024;
+
+fn multipart_part_size() -> usize {
+    std::env::var("S3_MULTIPART_PART_BYTES")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(MULTIPART_PART_SIZE)
+        .max(S3_MIN_PART_SIZE)
+}
+
+fn multipart_concurrency() -> usize {
+    std::env::var("S3_MULTIPART_CONCURRENCY")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(MULTIPART_CONCURRENCY)
+        .max(1)
+}
 
 impl S3ObjectStore {
     async fn put_multipart(&self, key: &str, data: Bytes) -> Result<(), ObjectStoreError> {
@@ -228,10 +252,10 @@ impl S3ObjectStore {
             .to_string();
 
         let chunks: Vec<(i32, Bytes)> = (0..data.len())
-            .step_by(MULTIPART_PART_SIZE)
+            .step_by(self.part_size)
             .enumerate()
             .map(|(i, start)| {
-                let end = (start + MULTIPART_PART_SIZE).min(data.len());
+                let end = (start + self.part_size).min(data.len());
                 (i as i32 + 1, data.slice(start..end))
             })
             .collect();
@@ -259,7 +283,7 @@ impl S3ObjectStore {
                         .build())
                 }
             }))
-            .buffer_unordered(MULTIPART_CONCURRENCY)
+            .buffer_unordered(self.part_concurrency)
             .collect()
             .await;
 
@@ -302,7 +326,7 @@ impl S3ObjectStore {
 #[async_trait]
 impl ObjectStore for S3ObjectStore {
     async fn put(&self, key: &str, data: Bytes) -> Result<(), ObjectStoreError> {
-        if data.len() >= MULTIPART_THRESHOLD {
+        if data.len() >= self.part_size {
             return self.put_multipart(key, data).await;
         }
         self.client

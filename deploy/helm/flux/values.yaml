@@ -10,6 +10,10 @@ broker:
   bucket: flux
   keyPrefix: bench
   flushIntervalMs: 50
+  # Flush quantum: buffer flushes at whichever comes first. Smaller values
+  # cut ack latency (smaller PUTs) at the cost of more objects/commits.
+  bufferMaxBytes: 268435456
+  bufferMaxWaitMs: 200
   pgPoolSize: 50
   # One read = one segment: keep equal to bench.maxBytes
   segmentMaxBytes: 268435456
