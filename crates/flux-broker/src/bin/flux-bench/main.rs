@@ -114,6 +114,10 @@ enum Commands {
         /// Skip the fetch phase
         #[arg(long, default_value = "false")]
         skip_fetch: bool,
+
+        /// Run produce and fetch concurrently (readers tail the producers)
+        #[arg(long, default_value = "false")]
+        concurrent: bool,
     },
 
     /// Generate comparison report
@@ -537,6 +541,7 @@ async fn main() {
             max_bytes,
             raw_reads,
             skip_fetch,
+            concurrent,
         } => {
             let database_url = database_url
                 .or_else(|| std::env::var("DATABASE_URL").ok())
@@ -555,6 +560,7 @@ async fn main() {
                 max_bytes,
                 raw_reads,
                 skip_fetch,
+                concurrent,
             })
             .await
             .expect("remote benchmark failed");

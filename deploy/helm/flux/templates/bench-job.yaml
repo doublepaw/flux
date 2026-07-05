@@ -36,6 +36,9 @@ spec:
             {{- if .Values.bench.skipFetch }}
             - --skip-fetch
             {{- end }}
+            {{- if .Values.bench.concurrent }}
+            - --concurrent
+            {{- end }}
           resources:
             {{- toYaml .Values.bench.resources | nindent 12 }}
 {{- end }}

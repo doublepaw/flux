@@ -73,6 +73,8 @@ bench:
   # Zero-copy fetch: client-side segment decode
   rawReads: false
   skipFetch: false
+  # Produce and fetch simultaneously (readers tail the producers)
+  concurrent: false
   resources:
     requests:
       cpu: "8"

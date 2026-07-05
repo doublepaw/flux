@@ -72,11 +72,13 @@ pub struct RemoteConfig {
     pub max_bytes: u32,
     pub raw_reads: bool,
     pub skip_fetch: bool,
+    pub concurrent: bool,
 }
 
 #[derive(Debug, Serialize)]
 pub struct RemoteReport {
     pub topic_ids: Vec<u32>,
+    pub concurrent: bool,
     pub requests: u64,
     pub records: u64,
     pub payload_bytes: u64,
@@ -89,6 +91,12 @@ pub struct RemoteReport {
     pub fetch_secs: Option<f64>,
     pub fetch_rec_rps: Option<f64>,
     pub fetch_mib_per_sec: Option<f64>,
+    pub fetch_p50_ms: Option<f64>,
+    pub fetch_p99_ms: Option<f64>,
+    /// Concurrent mode only: wall clock from first append to last fetch.
+    pub e2e_secs: Option<f64>,
+    /// Concurrent mode only: produced + fetched payload over e2e wall clock.
+    pub combined_mib_per_sec: Option<f64>,
 }
 
 fn encode_frame(msg: ClientMessage, capacity: usize) -> Vec<u8> {
@@ -156,6 +164,11 @@ pub async fn run(cfg: RemoteConfig) -> anyhow::Result<RemoteReport> {
         cfg.max_in_flight,
     );
 
+    let requests = cfg.writers as u64 * cfg.requests_per_writer;
+    let records = requests * cfg.records_per_batch as u64;
+    let payload_bytes = records * cfg.record_size as u64;
+    let records_per_topic = records / num_topics as u64;
+
     // ---- produce phase ----
     let produce_start = Instant::now();
     let mut handles = Vec::new();
@@ -166,6 +179,16 @@ pub async fn run(cfg: RemoteConfig) -> anyhow::Result<RemoteReport> {
             async move { run_writer(w, cfg, topic_id).await },
         ));
     }
+
+    // Concurrent mode: readers tail the producers from offset 0 while they
+    // write; the empty-read backoff in the fetch loops absorbs the
+    // not-yet-produced gap. This is how Ursa-class benchmarks measure.
+    let tailing_fetchers = if cfg.concurrent && !cfg.skip_fetch {
+        spawn_fetchers(&cfg, &topic_ids, records_per_topic)
+    } else {
+        Vec::new()
+    };
+
     let mut latency = Histogram::<u64>::new_with_bounds(1, 300_000_000, 3).unwrap();
     for h in handles {
         let writer_hist = h.await??;
@@ -173,54 +196,41 @@ pub async fn run(cfg: RemoteConfig) -> anyhow::Result<RemoteReport> {
     }
     let produce_secs = produce_start.elapsed().as_secs_f64();
 
-    let requests = cfg.writers as u64 * cfg.requests_per_writer;
-    let records = requests * cfg.records_per_batch as u64;
-    let payload_bytes = records * cfg.record_size as u64;
-    let records_per_topic = records / num_topics as u64;
-
     // ---- fetch phase ----
-    let (fetch_secs, fetch_rec_rps, fetch_mib) = if cfg.skip_fetch {
-        (None, None, None)
+    let mut e2e_secs = None;
+    let (fetch_secs, fetch_rec_rps, fetch_mib, fetch_p50, fetch_p99) = if cfg.skip_fetch {
+        (None, None, None, None, None)
     } else {
-        let fetch_start = Instant::now();
-        // Spread reader connections across topics, striping within each.
-        let stripes_per_topic = (cfg.fetch_readers.max(1) / num_topics).max(1) as u64;
-        let stripe = records_per_topic.div_ceil(stripes_per_topic);
-        let mut fetch_handles = Vec::new();
-        for &topic_id in &topic_ids {
-            for r in 0..stripes_per_topic {
-                let start = r * stripe;
-                let end = ((r + 1) * stripe).min(records_per_topic);
-                if start >= end {
-                    break;
-                }
-                let url = cfg.url.clone();
-                let max_bytes = cfg.max_bytes;
-                let raw = cfg.raw_reads;
-                fetch_handles.push(tokio::spawn(async move {
-                    if raw {
-                        fetch_offset_range_raw(&url, topic_id, start, end, max_bytes).await
-                    } else {
-                        fetch_offset_range(&url, topic_id, start, end, max_bytes).await
-                    }
-                }));
-            }
-        }
+        let (fetch_start, fetch_handles) = if cfg.concurrent {
+            (produce_start, tailing_fetchers)
+        } else {
+            let start = Instant::now();
+            (start, spawn_fetchers(&cfg, &topic_ids, records_per_topic))
+        };
         let mut seen = 0u64;
+        let mut fetch_latency = Histogram::<u64>::new_with_bounds(1, 300_000_000, 3).unwrap();
         for h in fetch_handles {
-            seen += h.await??;
+            let (n, hist) = h.await??;
+            seen += n;
+            fetch_latency.add(&hist).ok();
         }
         anyhow::ensure!(seen == records, "fetch saw {seen} of {records} records");
         let secs = fetch_start.elapsed().as_secs_f64();
+        if cfg.concurrent {
+            e2e_secs = Some(produce_start.elapsed().as_secs_f64());
+        }
         (
             Some(secs),
             Some(records as f64 / secs),
             Some(payload_bytes as f64 / secs / (1024.0 * 1024.0)),
+            Some(fetch_latency.value_at_quantile(0.5) as f64 / 1000.0),
+            Some(fetch_latency.value_at_quantile(0.99) as f64 / 1000.0),
         )
     };
 
     Ok(RemoteReport {
         topic_ids: topic_ids.iter().map(|t| t.0).collect(),
+        concurrent: cfg.concurrent,
         requests,
         records,
         payload_bytes,
@@ -233,7 +243,45 @@ pub async fn run(cfg: RemoteConfig) -> anyhow::Result<RemoteReport> {
         fetch_secs,
         fetch_rec_rps,
         fetch_mib_per_sec: fetch_mib,
+        fetch_p50_ms: fetch_p50,
+        fetch_p99_ms: fetch_p99,
+        e2e_secs,
+        combined_mib_per_sec: e2e_secs
+            .map(|secs| 2.0 * payload_bytes as f64 / secs / (1024.0 * 1024.0)),
     })
+}
+
+/// Spawn reader connections spread across topics, striping within each.
+/// Each returns (records seen, per-request round-trip latency histogram).
+fn spawn_fetchers(
+    cfg: &RemoteConfig,
+    topic_ids: &[TopicId],
+    records_per_topic: u64,
+) -> Vec<tokio::task::JoinHandle<anyhow::Result<(u64, Histogram<u64>)>>> {
+    let num_topics = topic_ids.len();
+    let stripes_per_topic = (cfg.fetch_readers.max(1) / num_topics).max(1) as u64;
+    let stripe = records_per_topic.div_ceil(stripes_per_topic);
+    let mut handles = Vec::new();
+    for &topic_id in topic_ids {
+        for r in 0..stripes_per_topic {
+            let start = r * stripe;
+            let end = ((r + 1) * stripe).min(records_per_topic);
+            if start >= end {
+                break;
+            }
+            let url = cfg.url.clone();
+            let max_bytes = cfg.max_bytes;
+            let raw = cfg.raw_reads;
+            handles.push(tokio::spawn(async move {
+                if raw {
+                    fetch_offset_range_raw(&url, topic_id, start, end, max_bytes).await
+                } else {
+                    fetch_offset_range(&url, topic_id, start, end, max_bytes).await
+                }
+            }));
+        }
+    }
+    handles
 }
 
 async fn run_writer(
@@ -359,10 +407,11 @@ async fn fetch_offset_range(
     start: u64,
     end: u64,
     max_bytes: u32,
-) -> anyhow::Result<u64> {
+) -> anyhow::Result<(u64, Histogram<u64>)> {
     let mut ws = connect_with_retry(url).await?;
     let mut current = start;
     let mut seen = 0u64;
+    let mut latency = Histogram::<u64>::new_with_bounds(1, 300_000_000, 3).unwrap();
 
     while current < end {
         let req = reader::ReadRequest {
@@ -370,6 +419,7 @@ async fn fetch_offset_range(
             offset: Offset(current),
             max_bytes,
         };
+        let req_start = Instant::now();
         ws.send(Message::Binary(encode_frame(
             ClientMessage::Read(req),
             64 * 1024,
@@ -402,13 +452,17 @@ async fn fetch_offset_range(
                 break;
             }
         }
-        if !progressed {
+        if progressed {
+            // Only data-carrying reads count toward fetch latency; empty
+            // tail-polls in concurrent mode would swamp the histogram.
+            let _ = latency.record(req_start.elapsed().as_micros().max(1) as u64);
+        } else {
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
     }
 
     ws.close(None).await.ok();
-    Ok(seen)
+    Ok((seen, latency))
 }
 
 /// Zero-copy fetch: request compressed FL segments and decode client-side.
@@ -418,10 +472,11 @@ async fn fetch_offset_range_raw(
     start: u64,
     end: u64,
     max_bytes: u32,
-) -> anyhow::Result<u64> {
+) -> anyhow::Result<(u64, Histogram<u64>)> {
     let mut ws = connect_with_retry(url).await?;
     let mut current = start;
     let mut seen = 0u64;
+    let mut latency = Histogram::<u64>::new_with_bounds(1, 300_000_000, 3).unwrap();
 
     while current < end {
         let req = reader::RawReadRequest {
@@ -429,6 +484,7 @@ async fn fetch_offset_range_raw(
             offset: Offset(current),
             max_bytes,
         };
+        let req_start = Instant::now();
         ws.send(Message::Binary(encode_frame(
             ClientMessage::RawRead(req),
             64 * 1024,
@@ -481,11 +537,13 @@ async fn fetch_offset_range_raw(
                 break;
             }
         }
-        if !progressed {
+        if progressed {
+            let _ = latency.record(req_start.elapsed().as_micros().max(1) as u64);
+        } else {
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
     }
 
     ws.close(None).await.ok();
-    Ok(seen)
+    Ok((seen, latency))
 }
