@@ -105,6 +105,20 @@ gcloud container node-pools create storage-pool --cluster $CLUSTER --region $REG
   --scopes gke-default,storage-full --workload-metadata=GCE_METADATA
 gcloud container node-pools delete default-pool --cluster $CLUSTER --region $REGION --quiet
 
+# 4-alt hardened-project addenda (what actually shipped the 2026-07-06 rows;
+# scopes alone are NOT enough when the compute SA lacks legacy Editor):
+# - Cloud Build fails (its SA can't read the staging bucket) → assemble the
+#   image as an OCI layout by hand (skopeo pull ubuntu:24.04 → layer tar with
+#   binaries + migrations + CA certs → patch manifest/config → skopeo copy
+#   with --dest-creds "oauth2accesstoken:$(gcloud auth print-access-token)").
+# - Node pulls from AR 403 → docker-registry secret ar-pull with the same
+#   token, patch both serviceaccounts' imagePullSecrets (image caches on
+#   node after first pull, token expiry then harmless).
+# - GCS writes 403 → bucket-scoped grant, needs a human:
+#   gcloud storage buckets add-iam-policy-binding gs://$BUCKET \
+#     --member serviceAccount:<project-number>-compute@developer.gserviceaccount.com \
+#     --role roles/storage.objectAdmin
+
 # 5. Deploy
 kubectl create configmap flux-migrations --from-file=migrations/001_init.sql
 helm install flux deploy/helm/flux \
@@ -176,7 +190,10 @@ az group delete -n $RG --yes --no-wait
 | AWS | EKS 2×c6i.4xlarge, S3 (IRSA, bucket-scoped policy) | 775 | 192 | 414 / 520 | 12.8M rec ×1KB; produce 16.1s, fetch 65.0s |
 | AWS v2 | same + segment cap 256MB, 256MB reads, read-ahead 2GB | 807 | **407** | 398 / 574 | fetch 2.1×: 65.0s → 30.7s |
 | local v2 | same box as local, segment cap + read-ahead 4GB | 1,267 | **592** | 262 / 317 | produce also +48% (encode capacity fix) |
-| GCP | — | — | — | — | pending |
+| GCP v1 (honest) | GKE 2×c2-standard-30, GCS, storage-scoped node pool (no-new-IAM fallback + user-granted bucket binding + AR pull secret), **incompressible payloads** | **139** | 366 raw | 1,631 / 5,652 | defaults (256MB/200ms/depth 4); GCS adapter PUTs are single-stream (S3 multipart knobs don't apply) |
+| GCP v2 (tuned quantum) | same + 64MB buffer, 100ms wait, depth 8 | **180** | 417 raw | 1,482 / 6,861 | +29% produce; latency ~flat → saturation queueing, not flush path. Broker budget: PUT p50≤0.5s p99≤5s, residency 10ms, commit 5ms — the tail + ordered commit chain is everything |
+| GCP v2 @ window 8 | same broker, max-in-flight 8/writer | 116 | 502 raw | **288 / 1,220** | below saturation the ack p50 is in Ursa's 200-500ms band; p99 is the GCS PUT tail |
+| GCP v2 concurrent | same broker, produce+consume simultaneously (window 64) | **169** | 137 (tailing) | 1,418 / 11,944 | first concurrent row: combined 273 MiB/s, e2e 91.6s, consumers finish 18s after producers; produce only -6% vs produce-only |
 | Azure | AKS 2×D16s_v5, Blob (account key), bench+broker on separate nodes | 1,045 | 210 | 299 / 501 | 12.8M rec ×1KB; produce 12.0s, fetch 59.4s |
 | Azure v2 | same + segment cap 256MB, 256MB reads, read-ahead 4GB | 1,026 | **713** | 297 / 535 | fetch 3.4×: 59.4s → 17.5s |
 | Azure v3 | same + zero-copy raw reads (client-side decode, CRC-verified) | 1,013 | **4,322** | 305 / 540 | fetch 17.5s → 2.9s; wire moves compressed bytes (bench payload ~40× compressible — real workloads compress 2-5×, expect proportionally less) |
