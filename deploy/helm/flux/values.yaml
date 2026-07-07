@@ -75,6 +75,10 @@ bench:
   skipFetch: false
   # Produce and fetch simultaneously (readers tail the producers)
   concurrent: false
+  # Parallel bench pods (indexed Job): shard i owns topics where
+  # idx % shards == i. writers/requestsPerWriter/fetchReaders are PER POD;
+  # topics must be >= shards and writers divisible by topics-per-shard.
+  shards: 1
   resources:
     requests:
       cpu: "8"

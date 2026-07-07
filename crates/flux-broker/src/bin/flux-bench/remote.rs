@@ -73,12 +73,24 @@ pub struct RemoteConfig {
     pub raw_reads: bool,
     pub skip_fetch: bool,
     pub concurrent: bool,
+    /// This process's slice when the bench runs as N sharded pods (indexed
+    /// Job): shard i of n owns global topics where idx % n == i. `writers`,
+    /// `requests_per_writer`, and `fetch_readers` are per-shard.
+    pub shard_index: u32,
+    pub shard_count: u32,
 }
 
 #[derive(Debug, Serialize)]
 pub struct RemoteReport {
     pub topic_ids: Vec<u32>,
     pub concurrent: bool,
+    pub shard_index: u32,
+    pub shard_count: u32,
+    /// Wall-clock stamps (unix ms) so sharded reports aggregate over the
+    /// true overlapping window instead of summing per-pod rates.
+    pub produce_start_unix_ms: u64,
+    pub produce_end_unix_ms: u64,
+    pub fetch_end_unix_ms: Option<u64>,
     pub requests: u64,
     pub records: u64,
     pub payload_bytes: u64,
@@ -134,17 +146,32 @@ async fn ensure_topic(database_url: &str, name: &str) -> anyhow::Result<u32> {
 }
 
 pub async fn run(cfg: RemoteConfig) -> anyhow::Result<RemoteReport> {
-    // Resolve/create the topic set. Writers spread round-robin, so require an
-    // even split to keep per-topic record counts exact for verification.
+    // Resolve/create this shard's slice of the topic set (shard i of n owns
+    // global topics where idx % n == i; single-process runs are shard 0 of
+    // 1 and own everything). Writers spread round-robin, so require an even
+    // split to keep per-topic record counts exact for verification.
     let num_topics = cfg.topics.max(1) as usize;
+    let shard_count = cfg.shard_count.max(1) as usize;
+    let shard_index = cfg.shard_index as usize;
     anyhow::ensure!(
-        cfg.writers % num_topics == 0,
-        "writers ({}) must be a multiple of topics ({})",
-        cfg.writers,
-        num_topics
+        shard_index < shard_count,
+        "shard index {shard_index} out of range for {shard_count} shards"
     );
-    let mut topic_ids = Vec::with_capacity(num_topics);
-    for i in 0..num_topics {
+    let my_topics: Vec<usize> = (0..num_topics)
+        .filter(|i| i % shard_count == shard_index)
+        .collect();
+    anyhow::ensure!(
+        !my_topics.is_empty(),
+        "no topics for shard {shard_index}: {num_topics} topics / {shard_count} shards"
+    );
+    anyhow::ensure!(
+        cfg.writers % my_topics.len() == 0,
+        "writers ({}) must be a multiple of this shard's topics ({})",
+        cfg.writers,
+        my_topics.len()
+    );
+    let mut topic_ids = Vec::with_capacity(my_topics.len());
+    for &i in &my_topics {
         let name = if num_topics == 1 {
             cfg.topic.clone()
         } else {
@@ -152,11 +179,14 @@ pub async fn run(cfg: RemoteConfig) -> anyhow::Result<RemoteReport> {
         };
         topic_ids.push(TopicId(ensure_topic(&cfg.database_url, &name).await?));
     }
+    let num_topics = topic_ids.len();
     eprintln!(
-        "remote bench: url={} topic={} topics={} writers={} req/writer={} rec/batch={} rec_size={} window={}",
+        "remote bench: url={} topic={} topics={} shard={}/{} writers={} req/writer={} rec/batch={} rec_size={} window={}",
         cfg.url,
         cfg.topic,
         num_topics,
+        shard_index,
+        shard_count,
         cfg.writers,
         cfg.requests_per_writer,
         cfg.records_per_batch,
@@ -170,6 +200,7 @@ pub async fn run(cfg: RemoteConfig) -> anyhow::Result<RemoteReport> {
     let records_per_topic = records / num_topics as u64;
 
     // ---- produce phase ----
+    let produce_start_unix_ms = now_unix_ms();
     let produce_start = Instant::now();
     let mut handles = Vec::new();
     for w in 0..cfg.writers {
@@ -195,9 +226,11 @@ pub async fn run(cfg: RemoteConfig) -> anyhow::Result<RemoteReport> {
         latency.add(&writer_hist).ok();
     }
     let produce_secs = produce_start.elapsed().as_secs_f64();
+    let produce_end_unix_ms = now_unix_ms();
 
     // ---- fetch phase ----
     let mut e2e_secs = None;
+    let mut fetch_end_unix_ms = None;
     let (fetch_secs, fetch_rec_rps, fetch_mib, fetch_p50, fetch_p99) = if cfg.skip_fetch {
         (None, None, None, None, None)
     } else {
@@ -216,6 +249,7 @@ pub async fn run(cfg: RemoteConfig) -> anyhow::Result<RemoteReport> {
         }
         anyhow::ensure!(seen == records, "fetch saw {seen} of {records} records");
         let secs = fetch_start.elapsed().as_secs_f64();
+        fetch_end_unix_ms = Some(now_unix_ms());
         if cfg.concurrent {
             e2e_secs = Some(produce_start.elapsed().as_secs_f64());
         }
@@ -231,6 +265,11 @@ pub async fn run(cfg: RemoteConfig) -> anyhow::Result<RemoteReport> {
     Ok(RemoteReport {
         topic_ids: topic_ids.iter().map(|t| t.0).collect(),
         concurrent: cfg.concurrent,
+        shard_index: cfg.shard_index,
+        shard_count: cfg.shard_count.max(1),
+        produce_start_unix_ms,
+        produce_end_unix_ms,
+        fetch_end_unix_ms,
         requests,
         records,
         payload_bytes,
@@ -249,6 +288,13 @@ pub async fn run(cfg: RemoteConfig) -> anyhow::Result<RemoteReport> {
         combined_mib_per_sec: e2e_secs
             .map(|secs| 2.0 * payload_bytes as f64 / secs / (1024.0 * 1024.0)),
     })
+}
+
+fn now_unix_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock before epoch")
+        .as_millis() as u64
 }
 
 /// Spawn reader connections spread across topics, striping within each.
