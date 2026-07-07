@@ -194,6 +194,9 @@ az group delete -n $RG --yes --no-wait
 | GCP v2 (tuned quantum) | same + 64MB buffer, 100ms wait, depth 8 | **180** | 417 raw | 1,482 / 6,861 | +29% produce; latency ~flat → saturation queueing, not flush path. Broker budget: PUT p50≤0.5s p99≤5s, residency 10ms, commit 5ms — the tail + ordered commit chain is everything |
 | GCP v2 @ window 8 | same broker, max-in-flight 8/writer | 116 | 502 raw | **288 / 1,220** | below saturation the ack p50 is in Ursa's 200-500ms band; p99 is the GCS PUT tail |
 | GCP v2 concurrent | same broker, produce+consume simultaneously (window 64) | **169** | 137 (tailing) | 1,418 / 11,944 | first concurrent row: combined 273 MiB/s, e2e 91.6s, consumers finish 18s after producers; produce only -6% vs produce-only |
+| GCP v3 (parallel uploads) | v2 + multipart in the GCS adapter (16MB parts, 8-way) | **348** | 388 raw | 808 / 2,687 | produce +93% vs v2; saturated p99 6.9s → 2.7s; now matches AWS v5 |
+| GCP v3 @ window 8 | same broker, max-in-flight 8/writer | 100 | — | **357 / 1,644** | ack p50 stays in the 200-500ms band |
+| GCP v3 concurrent | produce+consume simultaneously (window 64) | **236** | 172 (tailing) | 901 / 3,754 | combined 343 MiB/s; **~14.8 MB/s/core produce under concurrent load vs Ursa's ~13** — ahead on their own methodology, single broker |
 | Azure | AKS 2×D16s_v5, Blob (account key), bench+broker on separate nodes | 1,045 | 210 | 299 / 501 | 12.8M rec ×1KB; produce 12.0s, fetch 59.4s |
 | Azure v2 | same + segment cap 256MB, 256MB reads, read-ahead 4GB | 1,026 | **713** | 297 / 535 | fetch 3.4×: 59.4s → 17.5s |
 | Azure v3 | same + zero-copy raw reads (client-side decode, CRC-verified) | 1,013 | **4,322** | 305 / 540 | fetch 17.5s → 2.9s; wire moves compressed bytes (bench payload ~40× compressible — real workloads compress 2-5×, expect proportionally less) |
