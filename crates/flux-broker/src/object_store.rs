@@ -471,6 +471,8 @@ impl ObjectStore for S3ObjectStore {
 /// standard environment (metadata server / workload identity / env vars).
 pub struct CloudObjectStore {
     inner: Box<dyn object_store::ObjectStore>,
+    part_size: usize,
+    part_concurrency: usize,
 }
 
 impl CloudObjectStore {
@@ -485,6 +487,8 @@ impl CloudObjectStore {
             })?;
         Ok(Self {
             inner: Box::new(store),
+            part_size: multipart_part_size(),
+            part_concurrency: multipart_concurrency(),
         })
     }
 
@@ -499,6 +503,8 @@ impl CloudObjectStore {
             })?;
         Ok(Self {
             inner: Box::new(store),
+            part_size: multipart_part_size(),
+            part_concurrency: multipart_concurrency(),
         })
     }
 
@@ -518,10 +524,34 @@ impl CloudObjectStore {
 impl ObjectStore for CloudObjectStore {
     async fn put(&self, key: &str, data: Bytes) -> Result<(), ObjectStoreError> {
         let path = object_store::path::Path::from(key);
-        self.inner
-            .put(&path, data.into())
+        if data.len() < self.part_size {
+            self.inner
+                .put(&path, data.into())
+                .await
+                .map_err(|e| Self::map_err(key, e))?;
+            return Ok(());
+        }
+        // Parallel multipart: a single upload stream tops out at ~50-90 MB/s
+        // on GCS/Azure, same as S3; concurrent parts are the throughput and
+        // ack-latency lever (same knobs as the native S3 store).
+        let upload = self
+            .inner
+            .put_multipart(&path)
             .await
             .map_err(|e| Self::map_err(key, e))?;
+        let mut writer =
+            object_store::WriteMultipart::new_with_chunk_size(upload, self.part_size);
+        let mut offset = 0;
+        while offset < data.len() {
+            let end = (offset + self.part_size).min(data.len());
+            writer
+                .wait_for_capacity(self.part_concurrency)
+                .await
+                .map_err(|e| Self::map_err(key, e))?;
+            writer.put(data.slice(offset..end));
+            offset = end;
+        }
+        writer.finish().await.map_err(|e| Self::map_err(key, e))?;
         Ok(())
     }
 
