@@ -18,6 +18,8 @@ use arrow::record_batch::RecordBatch as ArrowRecordBatch;
 use chrono::{DateTime, Utc};
 
 use flux_common::ids::SchemaId;
+
+use crate::schema_mapping::META_FIELD_ID_BASE;
 use flux_common::types::Record;
 use flux_core::avro::Schema as CoreSchema;
 use flux_core::avro::value::{BatchDeserializer, BumpValue};
@@ -186,9 +188,7 @@ impl RecordConverter {
 
         // Also check for renames: if writer_json has flux.renames, the
         // old_name in writer might map to new_name in reader
-        let renames = writer_json
-            .get("flux.renames")
-            .and_then(|v| v.as_object());
+        let renames = writer_json.get("flux.renames").and_then(|v| v.as_object());
 
         let writer_field_types: Vec<String> = writer_fields
             .iter()
@@ -419,6 +419,11 @@ fn json_to_default(val: &serde_json::Value) -> DefaultValue {
 // ============================================================================
 
 fn build_arrow_schema_from_json(fields: &[serde_json::Value]) -> Result<ArrowSchema> {
+    // Field-id assignment mirrors schema_mapping::avro_to_iceberg_schema
+    // exactly (field id first, then its nested children): iceberg-rust 0.9
+    // maps Arrow columns to Iceberg fields via PARQUET:field_id metadata
+    // and rejects batches without it.
+    let mut next_id = 1i32;
     let mut arrow_fields: Vec<Field> = fields
         .iter()
         .map(|f| {
@@ -426,21 +431,84 @@ fn build_arrow_schema_from_json(fields: &[serde_json::Value]) -> Result<ArrowSch
             let type_val = &f["type"];
             let dt = json_type_to_arrow(type_val);
             let nullable = is_nullable(type_val);
-            Field::new(name, dt, nullable)
+            with_field_ids(Field::new(name, dt, nullable), &mut next_id)
         })
         .collect();
 
-    // Metadata columns
-    arrow_fields.push(Field::new("_offset", DataType::Int64, false));
-    arrow_fields.push(Field::new("_partition_id", DataType::Int32, false));
-    arrow_fields.push(Field::new(
-        "_ingest_time",
-        DataType::Timestamp(TimeUnit::Microsecond, None),
-        false,
+    // Metadata columns: fixed ids from schema_mapping::META_FIELD_ID_BASE.
+    arrow_fields.push(tag_field_id(
+        Field::new("_offset", DataType::Int64, false),
+        META_FIELD_ID_BASE,
     ));
-    arrow_fields.push(Field::new("_key", DataType::Binary, true));
+    arrow_fields.push(tag_field_id(
+        Field::new("_partition_id", DataType::Int32, false),
+        META_FIELD_ID_BASE + 1,
+    ));
+    arrow_fields.push(tag_field_id(
+        Field::new(
+            "_ingest_time",
+            // Iceberg timestamptz maps to UTC-tagged Arrow timestamps;
+            // the parquet writer rejects naive ones.
+            DataType::Timestamp(TimeUnit::Microsecond, Some("+00:00".into())),
+            false,
+        ),
+        META_FIELD_ID_BASE + 2,
+    ));
+    arrow_fields.push(tag_field_id(
+        Field::new("_key", DataType::Binary, true),
+        META_FIELD_ID_BASE + 3,
+    ));
 
     Ok(ArrowSchema::new(arrow_fields))
+}
+
+fn tag_field_id(field: Field, id: i32) -> Field {
+    field.with_metadata(std::collections::HashMap::from([(
+        parquet::arrow::PARQUET_FIELD_ID_META_KEY.to_string(),
+        id.to_string(),
+    )]))
+}
+
+/// Assign this field's id, then walk its children in the same order as
+/// schema_mapping's avro walk (struct fields in order; list element; map
+/// key then value — the synthetic map "entries" struct carries no id).
+fn with_field_ids(field: Field, next_id: &mut i32) -> Field {
+    let id = *next_id;
+    *next_id += 1;
+    let dt = descend_field_ids(field.data_type(), next_id);
+    tag_field_id(Field::new(field.name(), dt, field.is_nullable()), id)
+}
+
+fn descend_field_ids(dt: &DataType, next_id: &mut i32) -> DataType {
+    match dt {
+        DataType::Struct(children) => DataType::Struct(
+            children
+                .iter()
+                .map(|c| with_field_ids((**c).clone(), next_id))
+                .collect(),
+        ),
+        DataType::List(inner) => {
+            DataType::List(Arc::new(with_field_ids((**inner).clone(), next_id)))
+        }
+        DataType::Map(entries, sorted) => {
+            let DataType::Struct(kv) = entries.data_type() else {
+                return dt.clone();
+            };
+            let tagged: Vec<Field> = kv
+                .iter()
+                .map(|f| with_field_ids((**f).clone(), next_id))
+                .collect();
+            DataType::Map(
+                Arc::new(Field::new(
+                    entries.name(),
+                    DataType::Struct(tagged.into()),
+                    entries.is_nullable(),
+                )),
+                *sorted,
+            )
+        }
+        other => other.clone(),
+    }
 }
 
 fn is_nullable(type_val: &serde_json::Value) -> bool {
@@ -567,13 +635,15 @@ fn create_builder(dt: &DataType) -> Result<Box<dyn ArrayBuilder>> {
         DataType::Date32 => Box::new(Date32Builder::new()),
         DataType::Time32(TimeUnit::Millisecond) => Box::new(Time32MillisecondBuilder::new()),
         DataType::Time64(TimeUnit::Microsecond) => Box::new(Time64MicrosecondBuilder::new()),
-        DataType::Timestamp(TimeUnit::Millisecond, _) => {
-            Box::new(TimestampMillisecondBuilder::new())
+        DataType::Timestamp(TimeUnit::Millisecond, tz) => {
+            Box::new(TimestampMillisecondBuilder::new().with_timezone_opt(tz.clone()))
         }
-        DataType::Timestamp(TimeUnit::Microsecond, _) => {
-            Box::new(TimestampMicrosecondBuilder::new())
+        DataType::Timestamp(TimeUnit::Microsecond, tz) => {
+            Box::new(TimestampMicrosecondBuilder::new().with_timezone_opt(tz.clone()))
         }
-        DataType::Timestamp(TimeUnit::Nanosecond, _) => Box::new(TimestampNanosecondBuilder::new()),
+        DataType::Timestamp(TimeUnit::Nanosecond, tz) => {
+            Box::new(TimestampNanosecondBuilder::new().with_timezone_opt(tz.clone()))
+        }
         DataType::FixedSizeBinary(size) => Box::new(FixedSizeBinaryBuilder::new(*size)),
         DataType::Decimal128(p, s) => {
             Box::new(Decimal128Builder::new().with_precision_and_scale(*p, *s)?)
