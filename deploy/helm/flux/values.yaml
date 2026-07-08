@@ -10,6 +10,10 @@ broker:
   bucket: flux
   keyPrefix: bench
   flushIntervalMs: 50
+  # Flush quantum: buffer flushes at whichever comes first. Smaller values
+  # cut ack latency (smaller PUTs) at the cost of more objects/commits.
+  bufferMaxBytes: 268435456
+  bufferMaxWaitMs: 200
   pgPoolSize: 50
   # One read = one segment: keep equal to bench.maxBytes
   segmentMaxBytes: 268435456
@@ -69,6 +73,12 @@ bench:
   # Zero-copy fetch: client-side segment decode
   rawReads: false
   skipFetch: false
+  # Produce and fetch simultaneously (readers tail the producers)
+  concurrent: false
+  # Parallel bench pods (indexed Job): shard i owns topics where
+  # idx % shards == i. writers/requestsPerWriter/fetchReaders are PER POD;
+  # topics must be >= shards and writers divisible by topics-per-shard.
+  shards: 1
   resources:
     requests:
       cpu: "8"

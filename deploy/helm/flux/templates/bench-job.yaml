@@ -6,6 +6,11 @@ metadata:
   name: {{ .Release.Name }}-bench-{{ now | unixEpoch }}
 spec:
   backoffLimit: 0
+  {{- if gt (int .Values.bench.shards) 1 }}
+  completions: {{ .Values.bench.shards | int }}
+  parallelism: {{ .Values.bench.shards | int }}
+  completionMode: Indexed
+  {{- end }}
   template:
     metadata:
       labels:
@@ -35,6 +40,12 @@ spec:
             {{- end }}
             {{- if .Values.bench.skipFetch }}
             - --skip-fetch
+            {{- end }}
+            {{- if .Values.bench.concurrent }}
+            - --concurrent
+            {{- end }}
+            {{- if gt (int .Values.bench.shards) 1 }}
+            - --shard-count={{ .Values.bench.shards | int }}
             {{- end }}
           resources:
             {{- toYaml .Values.bench.resources | nindent 12 }}

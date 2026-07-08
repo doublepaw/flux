@@ -114,6 +114,20 @@ enum Commands {
         /// Skip the fetch phase
         #[arg(long, default_value = "false")]
         skip_fetch: bool,
+
+        /// Run produce and fetch concurrently (readers tail the producers)
+        #[arg(long, default_value = "false")]
+        concurrent: bool,
+
+        /// Shard index when running as N parallel bench pods (defaults to
+        /// $JOB_COMPLETION_INDEX, set automatically in k8s indexed Jobs)
+        #[arg(long)]
+        shard_index: Option<u32>,
+
+        /// Total bench shards; this process owns topics where
+        /// topic_idx % shard_count == shard_index
+        #[arg(long, default_value = "1")]
+        shard_count: u32,
     },
 
     /// Generate comparison report
@@ -537,10 +551,20 @@ async fn main() {
             max_bytes,
             raw_reads,
             skip_fetch,
+            concurrent,
+            shard_index,
+            shard_count,
         } => {
             let database_url = database_url
                 .or_else(|| std::env::var("DATABASE_URL").ok())
                 .expect("--database-url or DATABASE_URL required");
+            let shard_index = shard_index
+                .or_else(|| {
+                    std::env::var("JOB_COMPLETION_INDEX")
+                        .ok()
+                        .and_then(|v| v.parse().ok())
+                })
+                .unwrap_or(0);
             let report = remote::run(remote::RemoteConfig {
                 url,
                 database_url,
@@ -555,6 +579,9 @@ async fn main() {
                 max_bytes,
                 raw_reads,
                 skip_fetch,
+                concurrent,
+                shard_index,
+                shard_count,
             })
             .await
             .expect("remote benchmark failed");

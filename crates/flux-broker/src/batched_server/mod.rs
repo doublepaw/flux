@@ -157,6 +157,11 @@ pub struct BrokerState<S: ObjectStore> {
     pending_flush_commands: Arc<AtomicUsize>,
     /// Token cancelled on hard crash to stop flush loop and connection handlers.
     cancel_token: CancellationToken,
+    /// Random per-broker token embedded in flush object keys. Brokers
+    /// sharing a bucket otherwise collide: timestamp+counter alone repeats
+    /// across processes started together, and the last PUT silently
+    /// overwrites the other broker's committed segments.
+    pub(crate) flush_key_instance: u64,
     /// Read-ahead cache for direct reads (prefetches the next window).
     pub(crate) readahead: read_ahead::ReadAheadCache<(
         Vec<flux_wire::reader::TopicResult>,
@@ -234,6 +239,7 @@ impl<S: ObjectStore + Send + Sync + 'static> BrokerState<S> {
             in_flight_append,
             pending_flush_commands,
             cancel_token,
+            flush_key_instance: uuid::Uuid::new_v4().as_u128() as u64,
             readahead: read_ahead::ReadAheadCache::new(config.readahead_max_bytes),
             raw_readahead: read_ahead::ReadAheadCache::new(config.readahead_max_bytes),
             #[cfg(feature = "iceberg")]
