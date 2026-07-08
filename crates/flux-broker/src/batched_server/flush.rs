@@ -235,17 +235,22 @@ async fn execute_flush<S: ObjectStore + Send + Sync>(
         drain_result.pending_writers.len()
     );
 
-    // Generate S3 key.
-    // The counter ensures uniqueness even when orphaned flush tasks from a
-    // crashed broker overlap with new broker flush tasks in the same millisecond.
+    // Generate S3 key: timestamp + per-broker instance token + counter.
+    // The counter disambiguates flushes within one process (including
+    // orphaned tasks from a crashed broker in the same millisecond); the
+    // instance token disambiguates brokers sharing a bucket — without it,
+    // brokers started together collide on (millis, counter) and the last
+    // PUT silently overwrites the other broker's committed segments
+    // (found live by the first 4-broker benchmark, 2026-07-08).
     static FLUSH_KEY_COUNTER: AtomicU64 = AtomicU64::new(0);
     let counter = FLUSH_KEY_COUNTER.fetch_add(1, Ordering::Relaxed);
     let now = chrono::Utc::now();
     let key = format!(
-        "{}/{}/{}-{}.fl",
+        "{}/{}/{}-{:016x}-{}.fl",
         state.config.key_prefix,
         now.format("%Y-%m-%d"),
         now.timestamp_millis(),
+        state.flush_key_instance,
         counter
     );
 
@@ -396,10 +401,14 @@ async fn commit_batch(
 
     if !topic_deltas.is_empty() {
         let offsets_start = std::time::Instant::now();
-        let topic_delta_rows: Vec<(i32, i64)> = topic_deltas
+        // Sorted so concurrent brokers upserting overlapping topic sets
+        // take row locks in one global order — unordered multi-row upserts
+        // deadlock under READ COMMITTED (AB/BA lock acquisition).
+        let mut topic_delta_rows: Vec<(i32, i64)> = topic_deltas
             .iter()
             .map(|(&topic_id, &delta)| (topic_id, delta))
             .collect();
+        topic_delta_rows.sort_unstable_by_key(|&(topic_id, _)| topic_id);
 
         let mut offset_qb =
             QueryBuilder::<Postgres>::new("INSERT INTO topic_offsets (topic_id, next_offset) ");
@@ -539,5 +548,8 @@ fn build_writer_state_rows(
             .map_err(|e| sqlx::Error::Protocol(format!("batch ack serialization: {e}")))?;
         rows.push((writer_id, append_seq, acks_json));
     }
+    // Same deterministic lock order as topic_offsets: a writer that
+    // reconnects to another broker can have in-flight rows on both.
+    rows.sort_unstable_by_key(|&(writer_id, ..)| writer_id.0);
     Ok(rows.into_iter().collect())
 }

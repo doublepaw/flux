@@ -195,6 +195,109 @@ async fn test_concurrent_writes_unique_offsets() {
     );
 }
 
+async fn ws_produce_batches(
+    ws: &mut Ws,
+    writer_id: WriterId,
+    seq: u64,
+    batches: Vec<RecordBatch>,
+) -> Result<writer::AppendResponse, String> {
+    let req = writer::AppendRequest {
+        writer_id,
+        append_seq: AppendSeq(seq),
+        batches,
+    };
+    let buf = ws_helpers::encode_client_frame(ClientMessage::Append(req), 256 * 1024);
+    ws.send(Message::Binary(buf))
+        .await
+        .map_err(|e| format!("send: {}", e))?;
+
+    let msg = tokio::time::timeout(Duration::from_secs(15), ws.next())
+        .await
+        .map_err(|_| "timeout".to_string())?
+        .ok_or("stream closed")?
+        .map_err(|e| format!("recv: {}", e))?;
+
+    let data = match msg {
+        Message::Binary(d) => d,
+        _ => return Err("expected binary".to_string()),
+    };
+    match ws_helpers::decode_server_frame(&data) {
+        flux_wire::ServerMessage::Append(resp) => Ok(resp),
+        other => Err(format!("unexpected: {:?}", other)),
+    }
+}
+
+/// 2 brokers, one Postgres, appends that each carry batches for the SAME
+/// eight topics — broker 0's writers order them A→H, broker 1's H→A.
+/// Concurrent flushes then run multi-row topic_offsets upserts over the
+/// same rows; unless commit_batch takes row locks in a deterministic
+/// (sorted) order, Postgres kills one commit with `deadlock detected`
+/// and every in-flight append on that broker fails. Found live by the
+/// first 4-broker benchmark (2026-07-08).
+#[tokio::test]
+async fn test_cross_broker_multi_topic_commit_no_deadlock() {
+    let db = TestDb::new().await;
+    let mut topics = Vec::new();
+    for name in ["a", "b", "c", "d", "e", "f", "g", "h"] {
+        topics.push(TopicId(
+            db.create_topic(&format!("deadlock-{name}")).await as u32,
+        ));
+    }
+    let cluster = MultiBrokerCluster::start(db.url(), 2).await;
+    let addrs = cluster.addrs();
+
+    let mut handles = vec![];
+    for (broker_idx, &addr) in addrs.iter().enumerate() {
+        for p in 0..3 {
+            let mut order = topics.clone();
+            if broker_idx == 1 {
+                order.reverse();
+            }
+            handles.push(tokio::spawn(async move {
+                let mut ws = ws_connect(addr).await;
+                let writer_id = WriterId::new();
+                let mut failures = Vec::new();
+                for seq in 1..=40u64 {
+                    let batches: Vec<RecordBatch> = order
+                        .iter()
+                        .map(|&topic_id| RecordBatch {
+                            topic_id,
+                            schema_id: SchemaId(100),
+                            records: (0..50)
+                                .map(|i| Record {
+                                    key: None,
+                                    value: Bytes::from(format!(
+                                        "b{broker_idx}-p{p}-s{seq}-r{i}"
+                                    )),
+                                })
+                                .collect(),
+                        })
+                        .collect();
+                    match ws_produce_batches(&mut ws, writer_id, seq, batches).await {
+                        Ok(resp) if resp.success => {}
+                        Ok(resp) => {
+                            failures.push(format!("seq {seq}: {}", resp.error_message))
+                        }
+                        Err(e) => {
+                            failures.push(format!("seq {seq}: {e}"));
+                            ws = ws_connect(addr).await;
+                        }
+                    }
+                }
+                failures
+            }));
+        }
+    }
+    let mut all_failures = Vec::new();
+    for h in handles {
+        all_failures.extend(h.await.unwrap());
+    }
+    assert!(
+        all_failures.is_empty(),
+        "cross-broker multi-topic commits failed: {all_failures:?}"
+    );
+}
+
 /// 2 brokers. Write through both. Crash broker 0. Continue through broker 1.
 /// Restart broker 0. All acked writes visible, contiguous offsets.
 #[tokio::test]
