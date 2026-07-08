@@ -18,8 +18,13 @@ pub struct IcebergConfig {
     pub warehouse: String,
     /// Iceberg catalog namespace (default "flux").
     pub namespace: String,
-    /// Postgres catalog connection string.
+    /// Catalog flavor: "rest" (deployments; engine-visible) or "sql"
+    /// (dev/tests on the flux Postgres).
+    pub catalog_type: String,
+    /// Catalog connection string: REST endpoint URL or Postgres URI.
     pub catalog_uri: String,
+    /// Committer lease TTL; renewed on every commit attempt.
+    pub committer_lease_secs: i64,
     /// Catch-up scan frequency (default 30s).
     pub catchup_interval: Duration,
     /// Claim expiry for stale pending claims (default 5 min).
@@ -36,7 +41,9 @@ impl Default for IcebergConfig {
             global_memory_cap: 4 * 1024 * 1024 * 1024, // 4 GB
             warehouse: String::new(),
             namespace: "flux".to_string(),
+            catalog_type: "sql".to_string(),
             catalog_uri: String::new(),
+            committer_lease_secs: 30,
             catchup_interval: Duration::from_secs(30),
             claim_expiry: Duration::from_secs(300), // 5 min
             catchup_batch_limit: 100,
@@ -70,8 +77,16 @@ impl IcebergConfig {
         if let Ok(v) = std::env::var("ICEBERG_NAMESPACE") {
             config.namespace = v;
         }
+        if let Ok(v) = std::env::var("ICEBERG_CATALOG") {
+            config.catalog_type = v;
+        }
         if let Ok(v) = std::env::var("ICEBERG_CATALOG_URI") {
             config.catalog_uri = v;
+        }
+        if let Ok(v) = std::env::var("ICEBERG_COMMITTER_LEASE_SECS")
+            && let Ok(n) = v.parse()
+        {
+            config.committer_lease_secs = n;
         }
         if let Ok(v) = std::env::var("ICEBERG_CATCHUP_INTERVAL_SECS")
             && let Ok(n) = v.parse()

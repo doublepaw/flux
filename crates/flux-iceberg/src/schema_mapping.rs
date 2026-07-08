@@ -13,7 +13,7 @@ use crate::error::{IcebergError, Result};
 
 /// Metadata column field IDs start at this value.
 /// User-schema fields get IDs starting from 1.
-const META_FIELD_ID_BASE: i32 = 10_000;
+pub(crate) const META_FIELD_ID_BASE: i32 = 10_000;
 
 /// Convert an Avro schema to an Iceberg schema with metadata columns.
 ///

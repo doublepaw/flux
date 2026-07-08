@@ -15,8 +15,9 @@ flux-wire = { path = "../flux-wire" }
 bumpalo = { version = "3", features = ["collections"] }
 
 # Iceberg
-iceberg = "0.8"
-iceberg-catalog-sql = "0.8"
+iceberg = "0.9.1"
+iceberg-catalog-sql = "0.9.1"
+iceberg-catalog-rest = "0.9.1"
 
 # Arrow / Parquet
 arrow = { version = "57", features = ["prettyprint"] }
@@ -52,6 +53,7 @@ thiserror = { workspace = true }
 
 # Observability
 tracing = "0.1"
+iceberg-storage-opendal = { version = "0.9.1", features = ["opendal-gcs"] }
 
 [[bench]]
 name = "record_converter"
