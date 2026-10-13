@@ -530,12 +530,11 @@ jobs:
         working-directory: sdks/java/flux-sdk
         run: mvn package -DskipTests --batch-mode --no-transfer-progress
 
+      # Install into the setup-python interpreter, not a venv: the e2e test
+      # shells out to plain `python3`, which never sees a venv's packages.
       - name: Install Python SDK
         working-directory: sdks/python
-        run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          pip install -e ".[dev]"
+        run: pip install -e ".[dev]"
 
       - name: Run cross-language e2e test
         run: cargo test -p flux-broker --test cross_language_e2e -- --include-ignored

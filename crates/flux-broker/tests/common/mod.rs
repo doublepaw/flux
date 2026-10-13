@@ -18,7 +18,7 @@ use sqlx::PgPool;
 use flux_broker::{Coordinator, CoordinatorConfig, ObjectStore};
 
 // Re-export sub-module types so test files don't need to change imports.
-pub use db::{TestDb, produce_records};
+pub use db::{TestDb, produce_records, server_base_url};
 pub use fault_injection::{
     CrashableBroker, CrashableWsBroker, DbBlocker, FaultyObjectStore, MultiBrokerCluster,
 };

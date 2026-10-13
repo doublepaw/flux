@@ -25,21 +25,24 @@ pub struct TestDb {
     url: String,
 }
 
+/// DATABASE_URL with any database name (e.g. CI's `/flux`) stripped, so
+/// tests can address the server's `postgres` admin DB and their own DBs.
+pub fn server_base_url() -> String {
+    let url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5433".to_string());
+    match url.find("://") {
+        Some(scheme_end) => match url[scheme_end + 3..].find('/') {
+            Some(path_start) => url[..scheme_end + 3 + path_start].to_string(),
+            None => url,
+        },
+        None => url,
+    }
+}
+
 impl TestDb {
     /// Create a new test database with a unique name.
     pub async fn new() -> Self {
-        let base_url = std::env::var("DATABASE_URL")
-            .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5433".to_string());
-
-        // Strip any database name from the URL (e.g. /flux) to get the server base
-        let base_url = match base_url.rfind("://") {
-            Some(scheme_end) => match base_url[scheme_end + 3..].find('/') {
-                Some(path_start) => base_url[..scheme_end + 3 + path_start].to_string(),
-                None => base_url,
-            },
-            None => base_url,
-        };
-
+        let base_url = server_base_url();
         let admin_url = format!("{}/postgres", base_url);
         let admin_pool = PgPoolOptions::new()
             .max_connections(2)
