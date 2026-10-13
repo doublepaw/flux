@@ -444,9 +444,7 @@ fn ensure_java_sdk_built() -> Result<(), String> {
 
 /// Check if Postgres is available for creating isolated test databases.
 async fn database_available() -> bool {
-    let base_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5433".to_string());
-    let admin_url = format!("{}/postgres", base_url);
+    let admin_url = format!("{}/postgres", common::server_base_url());
 
     let connect = sqlx::postgres::PgPoolOptions::new()
         .max_connections(1)
