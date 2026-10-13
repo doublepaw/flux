@@ -1,6 +1,10 @@
 # Design: The Iceberg Path
 
-Status: proposed (2026-07). Informed by a survey of Ursa (VLDB'25 + 2025-26
+Status: P0 landed (2026-07-08) — snapshot-property watermarks (D1),
+committer lease + epoch fencing (D2), REST catalog option (D3),
+iceberg-rust 0.9.1; exactly-once verified by tests/exactly_once.rs.
+P1+ remain as below. Originally proposed 2026-07, informed by a survey
+of Ursa (VLDB'25 + 2025-26
 posts), Bufstream, Confluent/WarpStream Tableflow, Redpanda Iceberg Topics,
 AutoMQ Table Topics, Apache Fluss, Aiven's KIP-1150-adjacent RSM plugin, and
 the mid-2026 state of apache/iceberg-rust. Sources in `docs/` commit message

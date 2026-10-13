@@ -266,18 +266,14 @@ async fn test_cross_broker_multi_topic_commit_no_deadlock() {
                             records: (0..50)
                                 .map(|i| Record {
                                     key: None,
-                                    value: Bytes::from(format!(
-                                        "b{broker_idx}-p{p}-s{seq}-r{i}"
-                                    )),
+                                    value: Bytes::from(format!("b{broker_idx}-p{p}-s{seq}-r{i}")),
                                 })
                                 .collect(),
                         })
                         .collect();
                     match ws_produce_batches(&mut ws, writer_id, seq, batches).await {
                         Ok(resp) if resp.success => {}
-                        Ok(resp) => {
-                            failures.push(format!("seq {seq}: {}", resp.error_message))
-                        }
+                        Ok(resp) => failures.push(format!("seq {seq}: {}", resp.error_message)),
                         Err(e) => {
                             failures.push(format!("seq {seq}: {e}"));
                             ws = ws_connect(addr).await;

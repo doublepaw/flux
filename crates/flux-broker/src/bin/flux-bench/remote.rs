@@ -43,10 +43,11 @@ async fn connect_with_retry(
 }
 
 fn ws_config() -> WebSocketConfig {
-    let mut config = WebSocketConfig::default();
-    config.max_message_size = Some(1024 * 1024 * 1024);
-    config.max_frame_size = Some(1024 * 1024 * 1024);
-    config
+    WebSocketConfig {
+        max_message_size: Some(1024 * 1024 * 1024),
+        max_frame_size: Some(1024 * 1024 * 1024),
+        ..WebSocketConfig::default()
+    }
 }
 
 use flux_broker::fl::{Codec, FlReader, SegmentMeta};
@@ -165,7 +166,7 @@ pub async fn run(cfg: RemoteConfig) -> anyhow::Result<RemoteReport> {
         "no topics for shard {shard_index}: {num_topics} topics / {shard_count} shards"
     );
     anyhow::ensure!(
-        cfg.writers % my_topics.len() == 0,
+        cfg.writers.is_multiple_of(my_topics.len()),
         "writers ({}) must be a multiple of this shard's topics ({})",
         cfg.writers,
         my_topics.len()
@@ -297,13 +298,16 @@ fn now_unix_ms() -> u64 {
         .as_millis() as u64
 }
 
+/// A fetcher task's result: (records seen, per-request latency histogram).
+type FetcherHandle = tokio::task::JoinHandle<anyhow::Result<(u64, Histogram<u64>)>>;
+
 /// Spawn reader connections spread across topics, striping within each.
 /// Each returns (records seen, per-request round-trip latency histogram).
 fn spawn_fetchers(
     cfg: &RemoteConfig,
     topic_ids: &[TopicId],
     records_per_topic: u64,
-) -> Vec<tokio::task::JoinHandle<anyhow::Result<(u64, Histogram<u64>)>>> {
+) -> Vec<FetcherHandle> {
     let num_topics = topic_ids.len();
     let stripes_per_topic = (cfg.fetch_readers.max(1) / num_topics).max(1) as u64;
     let stripe = records_per_topic.div_ceil(stripes_per_topic);

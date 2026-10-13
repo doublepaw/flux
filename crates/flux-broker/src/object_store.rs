@@ -29,6 +29,9 @@ pub enum ObjectStoreError {
 }
 
 /// Object storage abstraction trait.
+// async_trait wraps each method in a #[must_use] future; newer clippy flags
+// that as double_must_use on our signatures.
+#[allow(clippy::double_must_use)]
 #[async_trait]
 pub trait ObjectStore: Send + Sync {
     /// Put an object with the given key and data.
@@ -539,8 +542,7 @@ impl ObjectStore for CloudObjectStore {
             .put_multipart(&path)
             .await
             .map_err(|e| Self::map_err(key, e))?;
-        let mut writer =
-            object_store::WriteMultipart::new_with_chunk_size(upload, self.part_size);
+        let mut writer = object_store::WriteMultipart::new_with_chunk_size(upload, self.part_size);
         let mut offset = 0;
         while offset < data.len() {
             let end = (offset + self.part_size).min(data.len());

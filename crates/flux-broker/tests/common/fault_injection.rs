@@ -171,11 +171,12 @@ impl flux_broker::ObjectStore for FaultyObjectStore {
         }
 
         // Transient failure: atomically decrement remaining count, fail if was > 0
+        // `fetch_update` is deprecated on newer toolchains in favour of
+        // `try_update`, which is not yet stable at our MSRV (1.94).
+        #[allow(deprecated)]
         let was_positive =
             self.fail_put_remaining
-                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| {
-                    if n > 0 { Some(n - 1) } else { None }
-                });
+                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1));
         if was_positive.is_ok() {
             return Err(flux_broker::object_store::ObjectStoreError::Io(
                 std::io::Error::other("injected fault: transient put failure"),

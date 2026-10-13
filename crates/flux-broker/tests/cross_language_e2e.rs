@@ -76,7 +76,7 @@ async fn start_server(
         #[cfg(feature = "iceberg")]
         iceberg: None,
         readahead_max_bytes: 0,
-            flush_pipeline_depth: 4,
+        flush_pipeline_depth: 4,
     };
 
     let state = BrokerState::new(pool, store, config).await;
@@ -545,7 +545,6 @@ async fn test_python_raw_read() {
         assert_eq!(record.value["index"], i as i64);
     }
 }
-
 
 /// Run Java raw (zero-copy) reader.
 async fn run_java_raw_reader(

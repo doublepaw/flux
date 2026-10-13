@@ -11,6 +11,7 @@
 //!   an anti-join on `iceberg_claims` and re-reads them from S3.
 
 pub mod catchup;
+pub mod committer;
 pub mod config;
 pub mod error;
 pub mod iceberg_buffer;

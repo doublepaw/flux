@@ -186,23 +186,13 @@ pub fn bench_varint(c: &mut Criterion) {
     // Medium values (2-4 byte varint)
     group.bench_function("encode_medium", |b| {
         let mut buf = [0u8; 10];
-        b.iter(|| {
-            black_box(flux_wire::varint::encode_u64(
-                black_box(100_000),
-                &mut buf,
-            ))
-        })
+        b.iter(|| black_box(flux_wire::varint::encode_u64(black_box(100_000), &mut buf)))
     });
 
     // Large values (8+ byte varint)
     group.bench_function("encode_large", |b| {
         let mut buf = [0u8; 10];
-        b.iter(|| {
-            black_box(flux_wire::varint::encode_u64(
-                black_box(u64::MAX),
-                &mut buf,
-            ))
-        })
+        b.iter(|| black_box(flux_wire::varint::encode_u64(black_box(u64::MAX), &mut buf)))
     });
 
     // Decode small

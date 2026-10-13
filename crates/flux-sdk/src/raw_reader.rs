@@ -16,7 +16,9 @@ use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async_with_conf
 
 use flux_common::ids::{Offset, SchemaId, TopicId};
 use flux_common::types::Record;
-use flux_wire::{ClientMessage, ServerMessage, decode_server_message, encode_client_message, reader, segment};
+use flux_wire::{
+    ClientMessage, ServerMessage, decode_server_message, encode_client_message, reader, segment,
+};
 
 use crate::SdkError;
 

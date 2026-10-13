@@ -84,8 +84,7 @@ jobs:
 
       - name: Run database migrations
         run: |
-          psql "$DATABASE_URL" -f migrations/001_init.sql
-          psql "$DATABASE_URL" -f migrations/002_iceberg.sql
+          for f in migrations/*.sql; do psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f "$f"; done
 
       - name: Run DB benchmarks
         run: cargo bench --bench criterion -- "commit_|coordinator_" --output-format bencher | tee bench-db.txt

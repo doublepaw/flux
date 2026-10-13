@@ -42,6 +42,7 @@ pub fn bench_buffer_insert(c: &mut Criterion) {
                             max_wait: Duration::from_secs(3600),
                             high_water_bytes: 1024 * 1024 * 1024,
                             low_water_bytes: 512 * 1024 * 1024,
+                            ..BufferConfig::default()
                         };
                         (BrokerBuffer::with_config(config), seg.clone())
                     },
@@ -77,6 +78,7 @@ pub fn bench_buffer_merge(c: &mut Criterion) {
                             max_wait: Duration::from_secs(3600),
                             high_water_bytes: 1024 * 1024 * 1024,
                             low_water_bytes: 512 * 1024 * 1024,
+                            ..BufferConfig::default()
                         };
                         let mut buffer = BrokerBuffer::with_config(config);
 
@@ -119,6 +121,7 @@ pub fn bench_buffer_drain(c: &mut Criterion) {
                             max_wait: Duration::from_secs(3600),
                             high_water_bytes: 1024 * 1024 * 1024,
                             low_water_bytes: 512 * 1024 * 1024,
+                            ..BufferConfig::default()
                         };
                         let mut buffer = BrokerBuffer::with_config(config);
 
@@ -158,6 +161,7 @@ pub fn bench_distribute_acks(c: &mut Criterion) {
                             max_wait: Duration::from_secs(3600),
                             high_water_bytes: 1024 * 1024 * 1024,
                             low_water_bytes: 512 * 1024 * 1024,
+                            ..BufferConfig::default()
                         };
                         let mut buffer = BrokerBuffer::with_config(config);
                         let mut receivers = Vec::with_capacity(count);
@@ -218,6 +222,7 @@ pub fn bench_multi_topic_insert(c: &mut Criterion) {
                             max_wait: Duration::from_secs(3600),
                             high_water_bytes: 1024 * 1024 * 1024,
                             low_water_bytes: 512 * 1024 * 1024,
+                            ..BufferConfig::default()
                         };
                         (BrokerBuffer::with_config(config), segs.clone())
                     },

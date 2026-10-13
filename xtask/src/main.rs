@@ -123,8 +123,7 @@ fn gen_proto() -> Result<()> {
     run_cmd(&mut py).context("failed to generate Python protobuf file")?;
 
     let mut rust = Command::new("cargo");
-    rust.current_dir(&root)
-        .args(["build", "-p", "flux-wire"]);
+    rust.current_dir(&root).args(["build", "-p", "flux-wire"]);
     run_cmd(&mut rust).context("failed to rebuild Rust protobuf output")?;
 
     Ok(())

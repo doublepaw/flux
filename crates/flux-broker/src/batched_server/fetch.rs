@@ -40,7 +40,7 @@ pub(crate) async fn fetch_records<S: ObjectStore + Send + Sync>(
     // `running < $budget` keeps every row whose *preceding* rows fit the
     // budget, so the row that crosses the budget is included and the read
     // can always make progress even when one batch exceeds max_bytes.
-    let rows: Vec<(i32, i64, i64, String, i64, i64, i64, i64)> = sqlx::query_as(
+    let rows: Vec<super::IndexRow> = sqlx::query_as(
         r#"
         WITH candidate AS (
             SELECT schema_id, start_offset, end_offset, s3_key,
@@ -142,14 +142,13 @@ pub(crate) async fn fetch_records<S: ObjectStore + Send + Sync>(
             current_schema = Some(schema_id);
         }
 
-        let mut record_offset = batch_start as u64 + skip as u64;
-        for record in records.into_iter().skip(skip) {
+        let first_offset = batch_start as u64 + skip as u64;
+        for (record_offset, record) in (first_offset..).zip(records.into_iter().skip(skip)) {
             if let Some(end) = end_offset
                 && record_offset >= end.0
             {
                 break;
             }
-            record_offset += 1;
             total_bytes += record.value.len() + record.key.as_ref().map(|k| k.len()).unwrap_or(0);
             current_records.push(record);
             if total_bytes >= max_bytes {

@@ -79,10 +79,7 @@ pub fn compute_evolution(new_json: &Value, old_json: &Value) -> Result<SchemaEvo
     }
 
     // 2. Deletions from flux.deletions: ["removed_field"]
-    if let Some(deletions) = new_json
-        .get("flux.deletions")
-        .and_then(|v| v.as_array())
-    {
+    if let Some(deletions) = new_json.get("flux.deletions").and_then(|v| v.as_array()) {
         for name in deletions {
             let name_str = name.as_str().ok_or_else(|| {
                 IcebergError::Schema("flux.deletions entries must be strings".into())

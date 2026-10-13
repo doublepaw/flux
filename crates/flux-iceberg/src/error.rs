@@ -30,6 +30,18 @@ pub enum IcebergError {
 
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
+
+    #[error("not the committer for {0}: another holder's lease is live")]
+    NotCommitter(String),
+
+    #[error(
+        "fenced: table {table} snapshot carries epoch {snapshot_epoch} > our lease epoch {lease_epoch}"
+    )]
+    Fenced {
+        table: String,
+        snapshot_epoch: i64,
+        lease_epoch: i64,
+    },
 }
 
 pub type Result<T> = std::result::Result<T, IcebergError>;

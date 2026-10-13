@@ -105,9 +105,7 @@ async fn write_avro_data(
         .read()
         .get(&schema_name)
         .cloned()
-        .ok_or_else(|| {
-            FluxError::InvalidSchema(format!("Schema '{}' not found", schema_name))
-        })?;
+        .ok_or_else(|| FluxError::InvalidSchema(format!("Schema '{}' not found", schema_name)))?;
 
     let mut builder = RecordBatchBuilder::new(schema.clone())?;
     let mut cursor = body.as_ref();
