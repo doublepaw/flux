@@ -258,8 +258,8 @@ fn arb_poll_response() -> impl Strategy<Value = reader::PollResponse> {
                 start_offset: Offset(start_offset),
                 end_offset: Offset(end_offset),
                 lease_deadline_ms,
-            raw_segments: vec![],
-        }
+                raw_segments: vec![],
+            }
         })
 }
 

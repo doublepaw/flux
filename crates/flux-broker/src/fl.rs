@@ -28,8 +28,6 @@ use thiserror::Error;
 /// Magic bytes for FL format.
 const MAGIC: &[u8; 4] = b"FLRN";
 
-/// ZSTD compression level.
-
 /// Error type for FL operations.
 #[derive(Debug, Error)]
 pub enum FlError {

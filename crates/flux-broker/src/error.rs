@@ -12,7 +12,9 @@ pub enum BrokerError {
     Io(#[from] std::io::Error),
 
     #[error("WebSocket error: {0}")]
-    WebSocket(#[from] tokio_tungstenite::tungstenite::Error),
+    // Boxed: tungstenite::Error is ~136 bytes and would bloat every
+    // Result<_, BrokerError> on the hot path.
+    WebSocket(Box<tokio_tungstenite::tungstenite::Error>),
 
     #[error("Database error: {0}")]
     Database(#[from] sqlx::Error),
@@ -28,6 +30,12 @@ pub enum BrokerError {
 
     #[error("Max inflight ranges exceeded")]
     MaxInflight,
+}
+
+impl From<tokio_tungstenite::tungstenite::Error> for BrokerError {
+    fn from(e: tokio_tungstenite::tungstenite::Error) -> Self {
+        BrokerError::WebSocket(Box::new(e))
+    }
 }
 
 impl From<crate::object_store::ObjectStoreError> for BrokerError {

@@ -62,6 +62,11 @@ use authz::{can_append, can_consume_topic, can_group_consume, can_read};
 use encoding::{ErrorResponseKind, client_message_kind, encode_error_response, error_kind_label};
 use flush::flush_loop;
 use read::handle_read_request;
+
+/// One `topic_batches` index row joined with the topic's high watermark:
+/// (schema_id, start_offset, end_offset, s3_key, byte_offset, byte_length,
+/// crc32, high_watermark). Shared by the classic and raw read paths.
+type IndexRow = (i32, i64, i64, String, i64, i64, i64, i64);
 use reader_group::{
     handle_commit, handle_heartbeat, handle_join_group, handle_leave_group, handle_poll,
 };

@@ -58,7 +58,7 @@ async fn start_server(
         #[cfg(feature = "iceberg")]
         iceberg: None,
         readahead_max_bytes: 0,
-            flush_pipeline_depth: 4,
+        flush_pipeline_depth: 4,
     };
 
     // Short session timeout for testing
@@ -519,8 +519,14 @@ async fn test_raw_poll_zero_copy() {
     };
 
     assert!(poll_resp.success);
-    assert!(poll_resp.results.is_empty(), "raw poll returns no decoded records");
-    assert!(!poll_resp.raw_segments.is_empty(), "raw poll returns segments");
+    assert!(
+        poll_resp.results.is_empty(),
+        "raw poll returns no decoded records"
+    );
+    assert!(
+        !poll_resp.raw_segments.is_empty(),
+        "raw poll returns segments"
+    );
 
     // Segments exactly cover the lease.
     assert_eq!(

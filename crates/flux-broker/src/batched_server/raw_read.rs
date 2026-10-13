@@ -64,7 +64,7 @@ pub(crate) async fn handle_raw_read_request<S: ObjectStore + Send + Sync + 'stat
                             .ok()
                             .map(|(segments, hwm)| {
                                 let bytes = segments.iter().map(|s| s.payload.len()).sum();
-                                (((segments, hwm)), bytes)
+                                ((segments, hwm), bytes)
                             });
                     state.raw_readahead.complete(next_key, prefetched);
                 });
@@ -107,7 +107,7 @@ pub(crate) async fn fetch_raw_segments<S: ObjectStore + Send + Sync>(
     max_bytes: usize,
     state: &BrokerState<S>,
 ) -> Result<RawWindow, BrokerError> {
-    let rows: Vec<(i32, i64, i64, String, i64, i64, i64, i64)> = sqlx::query_as(
+    let rows: Vec<super::IndexRow> = sqlx::query_as(
         r#"
         WITH candidate AS (
             SELECT schema_id, start_offset, end_offset, s3_key,

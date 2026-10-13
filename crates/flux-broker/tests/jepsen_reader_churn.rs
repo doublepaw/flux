@@ -42,8 +42,6 @@ async fn test_sustained_reader_churn_offset_continuity() {
             .expect("initial join should succeed");
     }
 
-    let mut next_reader_id = 4u32;
-
     for iteration in 0..10 {
         // Pick a reader to leave (rotating)
         let leave_idx = iteration % active_readers.len();
@@ -56,8 +54,7 @@ async fn test_sustained_reader_churn_offset_continuity() {
             .expect("leave should succeed");
 
         // New reader joins
-        let new_reader = format!("reader-{}", next_reader_id);
-        next_reader_id += 1;
+        let new_reader = format!("reader-{}", iteration + 4);
         active_readers[leave_idx] = new_reader.clone();
 
         coordinator
