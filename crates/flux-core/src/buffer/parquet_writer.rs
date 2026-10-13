@@ -72,7 +72,7 @@ impl ParquetFileWriter {
         let mut builder = WriterProperties::builder()
             .set_writer_version(self.config.writer_version)
             .set_compression(self.config.compression)
-            .set_max_row_group_size(self.config.row_group_size)
+            .set_max_row_group_row_count(Some(self.config.row_group_size))
             .set_data_page_size_limit(self.config.data_page_size);
 
         if self.config.enable_dictionary {
@@ -100,7 +100,7 @@ impl StreamingParquetWriter {
         let props = WriterProperties::builder()
             .set_writer_version(config.writer_version)
             .set_compression(config.compression)
-            .set_max_row_group_size(config.row_group_size)
+            .set_max_row_group_row_count(Some(config.row_group_size))
             .set_data_page_size_limit(config.data_page_size)
             .set_dictionary_enabled(config.enable_dictionary)
             .build();

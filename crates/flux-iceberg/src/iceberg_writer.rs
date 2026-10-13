@@ -240,7 +240,7 @@ impl TableWriter {
     ) -> Result<()> {
         let file_io = table.file_io().clone();
 
-        let location_gen = DefaultLocationGenerator::new(table.metadata().clone())
+        let location_gen = DefaultLocationGenerator::new(table.metadata())
             .map_err(|e| IcebergError::Iceberg(format!("location generator: {e}")))?;
         // Unique suffix per flush: the generator's counter restarts at 0
         // for every writer instance, so without it the second flush to a
@@ -409,9 +409,9 @@ fn read_snapshot_state(table: &Table) -> (HashMap<String, i64>, i64) {
 fn storage_factory_for(warehouse: &str) -> Arc<dyn iceberg::io::StorageFactory> {
     use iceberg_storage_opendal::OpenDalStorageFactory;
     if warehouse.starts_with("s3://") || warehouse.starts_with("s3a://") {
-        let scheme = warehouse.split("://").next().unwrap_or("s3").to_string();
+        // 0.10 takes the scheme from each path, so s3:// and s3a:// share
+        // one backend without configuring it here.
         Arc::new(OpenDalStorageFactory::S3 {
-            configured_scheme: scheme,
             customized_credential_load: None,
         })
     } else if warehouse.starts_with("gs://") {
